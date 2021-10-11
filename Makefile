@@ -45,6 +45,10 @@ buildroot_builddir := $(wrkdir)/buildroot_build
 buildroot_builddir_stamp := $(wrkdir)/.buildroot_builddir
 
 linux_srcdir := $(srcdir)/linux
+
+linux_patchdir := $(patchdir)/linux/$(DEVKIT)
+linux_patch_stamp := $(linux_srcdir)/.patches_applied
+
 linux_wrkdir := $(wrkdir)/linux
 riscv_dtbdir := $(linux_wrkdir)/arch/riscv/boot/dts/
 
@@ -59,6 +63,7 @@ flash_image := $(wrkdir)/$(DEVKIT)-$(GITID).gpt
 vfat_image := $(wrkdir)/$(DEVKIT)-vfat.part
 initramfs := $(wrkdir)/initramfs.cpio.gz
 rootfs := $(wrkdir)/rootfs.bin
+fit_config := $(confdir)/osbi-fit-image.its
 fit := $(wrkdir)/fitImage.fit
 
 device_tree_blob := $(wrkdir)/riscvpc.dtb
@@ -109,6 +114,13 @@ AMP_SUPPORT ?= y
 UBOOT_VERSION = 2021.04
 linux_defconfig := icicle_kit_amp_defconfig
 linux_dtb := $(riscv_dtbdir)/microchip/microchip-mpfs-icicle-kit-context-a.dtb
+else ifeq "$(DEVKIT)" "icicle-kit-es-sel4"
+HSS_SUPPORT ?= y
+HSS_TARGET ?= mpfs-icicle-kit-es
+UBOOT_VERSION = 2021.04
+linux_defconfig := icicle_kit_amp_defconfig
+linux_dtb := $(riscv_dtbdir)/microchip/microchip-mpfs-icicle-kit-sel4.dtb
+fit_config := $(confdir)/$(DEVKIT)/osbi-fit-image.its
 else
 HSS_SUPPORT ?= y
 HSS_TARGET ?= mpfs-icicle-kit-es
@@ -194,9 +206,14 @@ buildroot_rootfs_menuconfig: $(buildroot_rootfs_wrkdir)/.config $(buildroot_buil
 	$(MAKE) -C $(buildroot_builddir) O=$(buildroot_rootfs_wrkdir) savedefconfig
 	cp $(buildroot_rootfs_wrkdir)/defconfig conf/buildroot_rootfs_config
 
+$(linux_patch_stamp):
+	$(info "Apply linux patches")
+	@cd $(linux_srcdir) && (git am -k $(linux_patchdir)/* || (git am --abort && exit 1))
+	touch $@
+
 .PHONY: linux_cfg
 cfg: $(linux_wrkdir)/.config
-$(linux_wrkdir)/.config: $(linux_srcdir) $(CROSS_COMPILE)gcc
+$(linux_wrkdir)/.config: $(linux_patch_stamp) $(linux_srcdir) $(CROSS_COMPILE)gcc
 	mkdir -p $(dir $@)
 	$(MAKE) -C $(linux_srcdir) O=$(linux_wrkdir) CROSS_COMPILE=$(CROSS_COMPILE) ARCH=riscv $(linux_defconfig)
 ifeq (,$(filter rv%c,$(ISA)))
@@ -261,8 +278,8 @@ $(device_tree_blob): $(vmlinux)
 	$(MAKE) -C $(linux_srcdir) O=$(linux_wrkdir) CROSS_COMPILE=$(CROSS_COMPILE) ARCH=riscv dtbs
 	cp $(linux_dtb) $(device_tree_blob)
 
-$(fit): $(uboot_s) $(vmlinux_bin) $(initramfs) $(device_tree_blob) $(confdir)/osbi-fit-image.its $(kernel-modules-install-stamp)
-	PATH=$(PATH) $(buildroot_initramfs_wrkdir)/build/uboot-$(UBOOT_VERSION)/tools/mkimage -f $(confdir)/osbi-fit-image.its -A riscv -O linux -T flat_dt $@
+$(fit): $(uboot_s) $(vmlinux_bin) $(initramfs) $(device_tree_blob) $(fit_config) $(kernel-modules-install-stamp)
+	PATH=$(PATH) $(buildroot_initramfs_wrkdir)/build/uboot-$(UBOOT_VERSION)/tools/mkimage -f $(fit_config) -A riscv -O linux -T flat_dt $@
 
 $(libversion): $(fsbl_wrkdir_stamp)
 	- rm -rf $(libversion)
@@ -306,8 +323,16 @@ $(payload_generator_tarball):
 $(hss_payload_generator): $(payload_generator_tarball)
 	tar -xzf $(payload_generator_tarball) -C $(wrkdir)
 
-$(hss_uboot_payload_bin): $(uboot_s) $(hss_payload_generator) $(bootloaders-y)
-	cd $(buildroot_initramfs_wrkdir)/images && $(hss_payload_generator) -c $(payload_config) -v $(hss_uboot_payload_bin)
+payload_seL4_bin:
+	$(info "SEL4_BIN:$(SEL4_BIN):")
+	cp $(SEL4_BIN) $(buildroot_initramfs_wrkdir)/images/seL4.bin
+
+ifneq ($(SEL4_BIN),)
+payload_copy += payload_seL4_bin
+endif
+
+$(hss_uboot_payload_bin): $(uboot_s) $(hss_payload_generator) $(bootloaders-y) $(payload_copy)
+	cd $(buildroot_initramfs_wrkdir)/images && $(hss_payload_generator) -c $(payload_config) -vv $(hss_uboot_payload_bin)
 
 .PHONY: buildroot_initramfs_sysroot vmlinux bbl fit flash_image initrd opensbi u-boot bootloaders
 buildroot_initramfs_sysroot: $(buildroot_initramfs_sysroot)
@@ -415,10 +440,14 @@ format-icicle-image: $(fit) $(uboot_s_scr)
     --new=1:$(UBOOT_START):$(UBOOT_END) --change-name=1:uboot --typecode=1:$(HSS_PAYLOAD) \
     --new=2:$(LINUX_START):$(LINUX_END) --change-name=2:kernel --typecode=2:$(LINUX) \
     --new=3:$(ROOT_START):${ROOT_SIZE} --change-name=3:root	--typecode=2:$(LINUX) \
-    ${DISK}	
+    ${DISK}
 	-/sbin/partprobe
 	@sleep 1
-	
+
+.PHONY: update-icicle
+update-icicle: $(fit) $(uboot_s_scr)
+	@test -b $(DISK) || (echo "$(DISK): is not a block device"; exit 1)
+
 ifeq ($(DISK)1,$(wildcard $(DISK)1))
 	@$(eval partition_prefix := )
 else ifeq ($(DISK)s1,$(wildcard $(DISK)s1))

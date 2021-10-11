@@ -57,6 +57,16 @@ $ make clean
 $ make all DEVKIT=<devkit>
 ```
 
+## Building Linux + seL4 AMP image
+Created HSS payload and initamfs images run seL4 on hart1 and Linux on harts 2-4. Related memory e.g. configuration is defined in `conf/icicle-kit-es-sel4/dts/microchip-mpfs-icicle-kit.dts` Similar configuration is applied via Linux device tree `linux/arch/riscv/boot/dts/microchip/microchip-mpfs-icicle-kit-sel4.dts`.
+
+To build images use command
+```
+$ make all DEVKIT=icicle-kit-es-sel4 SEL4_BIN=<path_to_seL4_binary>
+```
+
+Build script copies seL4 image from `SEL4_BIN` to `$(buildroot_initramfs_wrkdir)/images`-directory.
+
 ## Loading the Image onto the Target
 The instructions for the [eMMC on the Icicle Kit can be found here](#Preparing-the-eMMC-for-the-Icicle-Kit), for the [SD card on the Icicle Kit here](#Preparing-an-SD-Card-for-the-Icicle-Kit) and for the [the MPFS here](#Preparing-an-SD-Card-for-MPFS).
 
