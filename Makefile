@@ -430,8 +430,8 @@ LINUX_START=24096
 LINUX_END=193120
 ROOT_START=195168
 
-.PHONY: format-icicle-image
-format-icicle-image: $(fit) $(uboot_s_scr)
+.PHONY: create-icicle-partitions
+create-icicle-partitions:
 	@test -b $(DISK) || (echo "$(DISK): is not a block device"; exit 1)
 	$(eval DEVICE_NAME := $(shell basename $(DISK)))
 	$(eval SD_SIZE := $(shell cat /sys/block/$(DEVICE_NAME)/size))
@@ -461,6 +461,9 @@ endif
 
 	dd if=$(hss_uboot_payload_bin) of=$(DISK)$(partition_prefix)1
 	dd if=$(vfat_image) of=$(DISK)$(partition_prefix)2
+
+.PHONY: format-icicle-image
+format-icicle-image: create-icicle-partitions update-icicle
 
 # mpfs
 .PHONY: format-boot-loader
