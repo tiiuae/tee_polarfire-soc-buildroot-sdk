@@ -3,8 +3,8 @@
 # this assumes ${fileaddr} is already set!!
 
 load mmc 0:2 ${fileaddr} fitImage.fit;
-bootm start 0xA0000000;
-bootm loados 0xA0000000;
+bootm start ${fileaddr};
+bootm loados ${fileaddr};
 bootm ramdisk;
 bootm fdt;
 fdt addr 0x8B000000;
