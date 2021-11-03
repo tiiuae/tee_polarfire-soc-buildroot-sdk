@@ -436,7 +436,7 @@ create-icicle-partitions:
 	$(eval DEVICE_NAME := $(shell basename $(DISK)))
 	$(eval SD_SIZE := $(shell cat /sys/block/$(DEVICE_NAME)/size))
 	$(eval ROOT_SIZE := $(shell expr $(SD_SIZE) \- $(RESERVED_SIZE)))
-	/sbin/sgdisk -Zo  \
+	sudo /sbin/sgdisk -Zo  \
     --new=1:$(UBOOT_START):$(UBOOT_END) --change-name=1:uboot --typecode=1:$(HSS_PAYLOAD) \
     --new=2:$(LINUX_START):$(LINUX_END) --change-name=2:kernel --typecode=2:$(LINUX) \
     --new=3:$(ROOT_START):${ROOT_SIZE} --change-name=3:root	--typecode=2:$(LINUX) \
@@ -459,8 +459,8 @@ else
 	@exit 1
 endif
 
-	dd if=$(hss_uboot_payload_bin) of=$(DISK)$(partition_prefix)1
-	dd if=$(vfat_image) of=$(DISK)$(partition_prefix)2
+	sudo dd if=$(hss_uboot_payload_bin) of=$(DISK)$(partition_prefix)1 bs=4M oflag=sync status=progress
+	sudo dd if=$(vfat_image) of=$(DISK)$(partition_prefix)2 bs=4M oflag=sync status=progress
 
 .PHONY: format-icicle-image
 format-icicle-image: create-icicle-partitions update-icicle
@@ -472,7 +472,7 @@ format-boot-loader: $(fit) $(vfat_image) $(bootloaders-y)
 	$(eval DEVICE_NAME := $(shell basename $(DISK)))
 	$(eval SD_SIZE := $(shell cat /sys/block/$(DEVICE_NAME)/size))
 	$(eval ROOT_SIZE := $(shell expr $(SD_SIZE) \- $(RESERVED_SIZE)))
-	/sbin/sgdisk -Zo  \
+	sudo /sbin/sgdisk -Zo  \
 		--new=1:$(FSBL_START):$(FSBL_END)   --change-name=1:fsbl	--typecode=1:$(FSBL) \
 		--new=2:$(VFAT_START):$(VFAT_END)  --change-name=2:"Vfat Boot"	--typecode=2:$(VFAT)   \
 		--new=3:$(OSBI_START):$(OSBI_END)  --change-name=3:osbi	--typecode=3:$(BBL) \
@@ -500,9 +500,9 @@ else
 	@exit 1
 endif
 
-	dd if=$(fsbl) of=$(PART1) bs=4096
-	dd if=$(vfat_image) of=$(PART2) bs=4096
-	dd if=$(opensbi) of=$(PART3) bs=4096
+	sudo dd if=$(fsbl) of=$(PART1) bs=4096 oflag=sync status=progress
+	sudo dd if=$(vfat_image) of=$(PART2) bs=4096 oflag=sync status=progress
+	sudo dd if=$(opensbi) of=$(PART3) bs=4M oflag=sync status=progress
 
 # DEB_IMAGE	:= rootfs.tar.gz
 # DEB_URL := 
@@ -538,7 +538,7 @@ else
 	@exit 1
 endif
 ifeq ($(DEVKIT),mpfs)
-	dd if=$(rootfs) of=$(PART4) bs=4096
+	sudo dd if=$(rootfs) of=$(PART4) bs=4096 oflag=sync status=progress
 else 
-	dd if=$(rootfs) of=$(PART3) bs=4096
+	sudo dd if=$(rootfs) of=$(PART3) bs=4096 oflag=sync status=progress
 endif
