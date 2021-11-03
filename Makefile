@@ -46,9 +46,6 @@ buildroot_builddir_stamp := $(wrkdir)/.buildroot_builddir
 
 linux_srcdir := $(srcdir)/linux
 
-linux_patchdir := $(patchdir)/linux/$(DEVKIT)
-linux_patch_stamp := $(linux_srcdir)/.patches_applied
-
 linux_wrkdir := $(wrkdir)/linux
 riscv_dtbdir := $(linux_wrkdir)/arch/riscv/boot/dts/
 
@@ -118,7 +115,7 @@ else ifeq "$(DEVKIT)" "icicle-kit-es-sel4"
 HSS_SUPPORT ?= y
 HSS_TARGET ?= mpfs-icicle-kit-es
 UBOOT_VERSION = 2021.04
-linux_defconfig := icicle_kit_amp_defconfig
+linux_defconfig := icicle_kit_sel4_defconfig
 linux_dtb := $(riscv_dtbdir)/microchip/microchip-mpfs-icicle-kit-sel4.dtb
 fit_config := $(confdir)/$(DEVKIT)/osbi-fit-image.its
 else
@@ -206,14 +203,9 @@ buildroot_rootfs_menuconfig: $(buildroot_rootfs_wrkdir)/.config $(buildroot_buil
 	$(MAKE) -C $(buildroot_builddir) O=$(buildroot_rootfs_wrkdir) savedefconfig
 	cp $(buildroot_rootfs_wrkdir)/defconfig conf/buildroot_rootfs_config
 
-$(linux_patch_stamp):
-	$(info "Apply linux patches")
-	@cd $(linux_srcdir) && (git am -k $(linux_patchdir)/* || (git am --abort && exit 1))
-	touch $@
-
 .PHONY: linux_cfg
 cfg: $(linux_wrkdir)/.config
-$(linux_wrkdir)/.config: $(linux_patch_stamp) $(linux_srcdir) $(CROSS_COMPILE)gcc
+$(linux_wrkdir)/.config: $(linux_srcdir) $(CROSS_COMPILE)gcc
 	mkdir -p $(dir $@)
 	$(MAKE) -C $(linux_srcdir) O=$(linux_wrkdir) CROSS_COMPILE=$(CROSS_COMPILE) ARCH=riscv $(linux_defconfig)
 ifeq (,$(filter rv%c,$(ISA)))
