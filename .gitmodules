@@ -1,6 +1,3 @@
-[submodule "linux"]
-	path = linux
-	url = https://github.com/polarfire-soc/linux.git
 [submodule "buildroot"]
 	path = buildroot
 	url = https://github.com/buildroot/buildroot.git
@@ -25,3 +22,6 @@
 [submodule "polarfire-soc-examples/polarfire-soc-amp-examples"]
 	path = polarfire-soc-examples/polarfire-soc-amp-examples
 	url = https://github.com/polarfire-soc/polarfire-soc-amp-examples.git
+[submodule "linux"]
+	path = linux
+	url = ssh://gerrit.ssrc-tre.fi:29418/Platsec/polarfire_linux
