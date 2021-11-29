@@ -85,8 +85,8 @@ openocd_srcdir := $(srcdir)/riscv-openocd
 openocd_wrkdir := $(wrkdir)/riscv-openocd
 openocd := $(openocd_wrkdir)/src/openocd
 
-payload_generator_url := https://github.com/polarfire-soc/hart-software-services/releases/download/2021.04/hss-payload-generator-0.99.16-linux-x86_64.tar.gz
-payload_generator_tarball := $(srcdir)/br-dl-dir/payload_generator.tar.gz
+payload_generator_url := https://github.com/polarfire-soc/hart-software-services/releases/download/2021.11/hss-payload-generator.zip
+payload_generator_tarball := $(srcdir)/br-dl-dir/payload_generator.zip
 # payload_generator_srcdir := $(srcdir)/hart-software-services/tools/hss-payload-generator
 # payloadgen_wrkdir := $(wrkdir)/payload_generator
 hss_payload_generator := $(wrkdir)/hss-payload-generator
@@ -94,9 +94,9 @@ hss_srcdir := $(srcdir)/hart-software-services
 hss_uboot_payload_bin := $(wrkdir)/payload.bin
 payload_config := $(confdir)/$(DEVKIT)/config.yaml
 
-amp_example := $(buildroot_initramfs_wrkdir)/images/amp-application.elf
-amp_example_srcdir := $(srcdir)/polarfire-soc-examples/polarfire-soc-amp-examples/mpfs-amp-freertos
-amp_example_wrkdir := $(wrkdir)/amp/mpfs-amp-freertos
+amp_example := $(buildroot_initramfs_wrkdir)/images/mpfs-rpmsg-remote.elf
+amp_example_srcdir := $(srcdir)/polarfire-soc-examples/polarfire-soc-amp-examples/mpfs-rpmsg-freertos
+amp_example_wrkdir := $(wrkdir)/amp/mpfs-rpmsg-freertos
 
 ifeq "$(DEVKIT)" "mpfs"
 FSBL_SUPPORT ?= y
@@ -108,7 +108,7 @@ else ifeq "$(DEVKIT)" "icicle-kit-es-amp"
 HSS_SUPPORT ?= y
 HSS_TARGET ?= mpfs-icicle-kit-es
 AMP_SUPPORT ?= y
-UBOOT_VERSION = 2021.04
+UBOOT_VERSION = 2021.10
 linux_defconfig := icicle_kit_amp_defconfig
 linux_dtb := $(riscv_dtbdir)/microchip/microchip-mpfs-icicle-kit-context-a.dtb
 else ifeq "$(DEVKIT)" "icicle-kit-es-sel4"
@@ -121,7 +121,7 @@ fit_config := $(confdir)/$(DEVKIT)/osbi-fit-image.its
 else
 HSS_SUPPORT ?= y
 HSS_TARGET ?= mpfs-icicle-kit-es
-UBOOT_VERSION = 2021.04
+UBOOT_VERSION = 2021.10
 linux_defconfig := icicle_kit_defconfig
 linux_dtb := $(riscv_dtbdir)/microchip/microchip-mpfs-icicle-kit.dtb
 endif
@@ -228,7 +228,7 @@ $(initramfs): $(buildroot_initramfs_sysroot) $(vmlinux) $(kernel-modules-install
 		$(confdir)/initramfs.txt \
 		$(buildroot_initramfs_sysroot)
 
-$(vmlinux): $(linux_wrkdir)/.config $(buildroot_initramfs_sysroot_stamp) $(CROSS_COMPILE)gcc
+$(vmlinux): $(linux_wrkdir)/.config $(CROSS_COMPILE)gcc
 	$(MAKE) -C $(linux_srcdir) O=$(linux_wrkdir) \
 		ARCH=riscv \
 		CROSS_COMPILE=$(CROSS_COMPILE) \
@@ -313,7 +313,9 @@ $(payload_generator_tarball):
 	wget $(payload_generator_url) -O $(payload_generator_tarball) --show-progress
 
 $(hss_payload_generator): $(payload_generator_tarball)
-	tar -xzf $(payload_generator_tarball) -C $(wrkdir)
+#	tar -xzf $(payload_generator_tarball) -C $(wrkdir)
+	unzip $(payload_generator_tarball) -d $(wrkdir)/payload_gen
+	cp $(wrkdir)/payload_gen/hss-payload-generator/binaries/hss-payload-generator $(wrkdir)
 
 payload_seL4_bin:
 	$(info "SEL4_BIN:$(SEL4_BIN):")
@@ -326,7 +328,7 @@ endif
 $(hss_uboot_payload_bin): $(uboot_s) $(hss_payload_generator) $(bootloaders-y) $(payload_copy)
 	cd $(buildroot_initramfs_wrkdir)/images && $(hss_payload_generator) -c $(payload_config) -vv $(hss_uboot_payload_bin)
 
-.PHONY: buildroot_initramfs_sysroot vmlinux bbl fit flash_image initrd opensbi u-boot bootloaders
+.PHONY: buildroot_initramfs_sysroot vmlinux bbl fit flash_image initrd opensbi u-boot bootloaders dtbs
 buildroot_initramfs_sysroot: $(buildroot_initramfs_sysroot)
 vmlinux: $(vmlinux)
 fit: $(fit)
@@ -337,6 +339,7 @@ opensbi: $(opensbi)
 fsbl: $(fsbl)
 bootloaders: $(bootloaders-y)
 root-fs: $(rootfs)
+dtbs: ${device_tree_blob}
 
 .PHONY: clean distclean
 clean:
@@ -360,14 +363,14 @@ $(openocd): $(openocd_srcdir)
 	cd $(openocd_wrkdir) && $</configure --enable-maintainer-mode --disable-werror --enable-ft2232_libftdi
 	$(MAKE) -C $(openocd_wrkdir)
 
-EXT_CFLAGS := -DMPFS_HAL_FIRST_HART=3 -DMPFS_HAL_LAST_HART=3
+EXT_CFLAGS := -DMPFS_HAL_FIRST_HART=4 -DMPFS_HAL_LAST_HART=4
 export EXT_CFLAGS
 .PHONY: amp
 amp: $(amp_example)
 $(amp_example): $(amp_example_srcdir) $(buildroot_initramfs_sysroot_stamp) $(CROSS_COMPILE)gcc
 	rm -rf $(amp_example_srcdir)/Default
-	$(MAKE) -C $(amp_example_srcdir) O=$(amp_example_wrkdir) CROSS_COMPILE=$(CROSS_COMPILE)
-	cp $(amp_example_srcdir)/Default/mpfs-amp-freertos.elf $(amp_example)
+	$(MAKE) -C $(amp_example_srcdir) O=$(amp_example_wrkdir) CROSS_COMPILE=$(CROSS_COMPILE) REMOTE=1
+	cp $(amp_example_srcdir)/Remote-Default/mpfs-rpmsg-remote.elf $(amp_example)
 
 $(vfat_image): $(fit) $(uboot_s_scr) $(bootloaders-y)
 	@if [ `du --apparent-size --block-size=512 $(fsbl) | cut -f 1` -ge $(FSBL_SIZE) ]; then \
@@ -381,7 +384,7 @@ $(vfat_image): $(fit) $(uboot_s_scr) $(bootloaders-y)
 ## sd/emmc/envm formatting
 
 # partition addreses for mpfs
-BBL			= 2E54B353-1271-4842-806F-E436D6AF6985
+BBL		= 2E54B353-1271-4842-806F-E436D6AF6985
 VFAT		= EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
 LINUX		= 0FC63DAF-8483-4772-8E79-3D69D8477DE4
 FSBL		= 5B193300-FC78-40CD-8002-E86C45580B47
@@ -389,7 +392,7 @@ UBOOT		= 5B193300-FC78-40CD-8002-E86C45580B47
 UBOOTENV	= a09354ac-cd63-11e8-9aff-70b3d592f0fa
 UBOOTDTB	= 070dd1a8-cd64-11e8-aa3d-70b3d592f0fa
 UBOOTFIT	= 04ffcafa-cd65-11e8-b974-70b3d592f0fa
-HSS_PAYLOAD = 21686148-6449-6E6F-744E-656564454649
+HSS_PAYLOAD 	= 21686148-6449-6E6F-744E-656564454649
 
 # partition addreses
 UENV_START=100

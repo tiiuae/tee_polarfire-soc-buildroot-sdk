@@ -4,7 +4,7 @@ It first will build the GNU cross-compilation toolchain for RISC-V, which will b
 
 Currently the following development platforms are supported:
 - [MPFS-DEV-KIT](https://github.com/polarfire-soc/polarfire-soc-documentation/blob/master/boards/mpfs-dev-kit/MPFS-DEV-KIT_user_guide.md) (HiFive Unleashed Expansion Board)
-- Icicle Kit (Engineering Sample) (Requires minimum FPGA design: [v2021.04](https://github.com/polarfire-soc/icicle-kit-reference-design/releases/tag/2021.04). Designs prior to this release use a different memory map and will fail to boot.)
+- Icicle Kit (Engineering Sample) (Requires minimum FPGA design: [v2021.08](https://github.com/polarfire-soc/icicle-kit-reference-design/releases/tag/2021.08). Designs prior to this release use a different memory map and will fail to boot.)
 
 The complete User Guides for each development platform, containing board and boot instructions, are available in the [polarfire-soc documentation repository](https://github.com/polarfire-soc/polarfire-soc-documentation). 
 
@@ -47,8 +47,10 @@ To boot Linux on your board using this image, see: [Loading the Image onto the T
 Note: The first time the build is run it can take a long time, as it also builds the RISC-V cross compiler toolchain. 
 
 The output file contains the first stage bootloader, the root file system and an image containing the linux kernel, device tree blob & second stage bootloader.           
-The source for the device tree for boards are in `conf/<devkit>/<devkit>.dts`.            
-The configuration options used for the Linux kernel are in `conf/<devkit>/linux_<kernel-version>_defconfig`.
+The source for the device tree for the MPFS DEV-KIT (HiFive Unleashed Expansion Board) board is available in `conf/mpfs/mpfs.dts`.       
+For other boards, the source is located in `linux/arch/riscv/boot/dts/microchip`.                  
+The configuration options used for the Linux kernel are in `linux/arch/riscv/configs/<devkit>_defconfig`.     
+`conf/<devkit>` contains the U-Boot and buildroot initramfs config files.
 
 ### Rebuilding the Linux Image
 If you need to rebuild your image or change the board being targeted, type the following from the top level directory of the polarfire-soc-buildroot-sdk:
@@ -206,6 +208,7 @@ This document assumes you are running on a modern Linux system. The process docu
 It should also work with other Linux distributions if the equivalent prerequisite packages are installed.        
 
 ### Prerequisite Packages
+#### Ubuntu
 Before starting, use the `apt` command to install prerequisite packages:
 ```
 sudo apt install autoconf automake autotools-dev bc bison build-essential curl \
@@ -218,6 +221,31 @@ python3-pip libyaml-dev libelf-dev zlib1g-dev xutils-dev
 Install the python library `kconfiglib`. Without this the Hart Software Services (HSS) will fail to build with a genconfig error.
 ```
 sudo pip3 install kconfiglib
+```
+
+#### Centos 8
+Before starting, use the `yum` command to install prerequisite packages:
+```
+sudo yum install autoconf bc bison curl flex gawk gdisk gperf git gmp-devel \
+libmpc-devel mpfr-devel ncurses-devel openssl-devel libtool patchutils \
+python2 screen texinfo unzip zlib-devel libblkid-devel dtc glib2-devel \
+pixman-devel mtools linux-firmware rsync python3 expat-devel wget cpio \
+vim-common dosfstools python3-pip libyaml-devel elfutils-libelf-devel \
+perl-ExtUtils-MakeMaker
+```
+Install the python library `kconfiglib`. Without this the Hart Software Services (HSS) will fail to build with a genconfig error.
+```
+sudo pip3 install kconfiglib
+```
+You may need to run the following commands before installing the prerequisites so that the packages can be located:
+```
+sudo yum groups mark install "Development Tools"  -y
+sudo yum install yum-utils -y
+sudo yum groupinstall "Development Tools" -y
+sudo yum install epel-release -y
+sudo yum install dnf-plugins-core -y
+sudo yum update -y
+sudo yum config-manager --set-enabled powertools
 ```
 
 ## Known Issues
