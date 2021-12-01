@@ -13,9 +13,6 @@
 [submodule "fsbl"]
 	path = fsbl
 	url = https://github.com/sifive/freedom-u540-c000-bootloader.git
-[submodule "hart-software-services"]
-	path = hart-software-services
-	url = https://github.com/polarfire-soc/hart-software-services.git
 [submodule "polarfire-soc-examples/polarfire-soc-linux-examples"]
 	path = polarfire-soc-examples/polarfire-soc-linux-examples
 	url = https://github.com/polarfire-soc/polarfire-soc-linux-examples.git
@@ -25,3 +22,6 @@
 [submodule "linux"]
 	path = linux
 	url = ssh://gerrit.ssrc-tre.fi:29418/Platsec/polarfire_linux
+[submodule "hart-software-services"]
+	path = hart-software-services
+	url = ssh://gerrit.ssrc-tre.fi:29418/Platsec/hart-software-services
