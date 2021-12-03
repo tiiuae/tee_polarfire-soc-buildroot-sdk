@@ -114,7 +114,7 @@ linux_dtb := $(riscv_dtbdir)/microchip/microchip-mpfs-icicle-kit-context-a.dtb
 else ifeq "$(DEVKIT)" "icicle-kit-es-sel4"
 HSS_SUPPORT ?= y
 HSS_TARGET ?= mpfs-icicle-kit-es
-UBOOT_VERSION = 2021.04
+UBOOT_VERSION = 2021.10
 linux_defconfig := icicle_kit_sel4_defconfig
 linux_dtb := $(riscv_dtbdir)/microchip/microchip-mpfs-icicle-kit-sel4.dtb
 fit_config := $(confdir)/$(DEVKIT)/osbi-fit-image.its
