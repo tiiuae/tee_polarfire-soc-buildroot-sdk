@@ -16,7 +16,7 @@
 	compatible = "microchip,mpfs-icicle-kit", "microchip,mpfs";
 
 	aliases {
-		serial1 = &uart2;
+		serial1 = &uart1;
 		ethernet0 = &mac1;
 	};
 
@@ -98,15 +98,11 @@
 	};
 };
 
-&cpu1 {
+&cpu4 {
 	status = "disabled"; // in use by context b
 };
 
 &uart1 {
-	status = "disabled";
-};
-
-&uart2 {
 	status = "enabled";
 };
 
