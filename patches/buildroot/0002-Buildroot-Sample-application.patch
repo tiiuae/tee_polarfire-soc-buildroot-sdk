@@ -1,4 +1,4 @@
-From 769f095e81e5aa25881982ddb5282e076106040e Mon Sep 17 00:00:00 2001
+From 457f13550646de82b05af5e2a4fe926e8c11920b Mon Sep 17 00:00:00 2001
 From: Jouni Ukkonen <jouni.ukkonen@unikie.com>
 Date: Fri, 10 Dec 2021 09:59:56 +0200
 Subject: [PATCH 2/2] Buildroot: Sample application
@@ -11,9 +11,9 @@ Signed-off-by: Jouni Ukkonen <jouni.ukkonen@unikie.com>
  package/soc_example/Config.in         |   5 +
  package/soc_example/soc_example.mk    |  19 ++
  package/soc_example/src/Makefile      |  13 +
- package/soc_example/src/ree_tee_msg.h | 126 ++++++++++
- package/soc_example/src/sel4_test.c   | 348 ++++++++++++++++++++++++++
- 6 files changed, 512 insertions(+)
+ package/soc_example/src/ree_tee_msg.h |  84 +++++++
+ package/soc_example/src/sel4_test.c   | 345 ++++++++++++++++++++++++++
+ 6 files changed, 467 insertions(+)
  create mode 100644 package/soc_example/Config.in
  create mode 100644 package/soc_example/soc_example.mk
  create mode 100644 package/soc_example/src/Makefile
@@ -89,10 +89,10 @@ index 0000000000..e3672299ab
 +	$(RM) sel4-demo
 diff --git a/package/soc_example/src/ree_tee_msg.h b/package/soc_example/src/ree_tee_msg.h
 new file mode 100644
-index 0000000000..daa99d44e3
+index 0000000000..f95c9b1501
 --- /dev/null
 +++ b/package/soc_example/src/ree_tee_msg.h
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,84 @@
 +/*
 + * Copyright 2021, Unikie
 + *
@@ -133,8 +133,6 @@ index 0000000000..daa99d44e3
 +    TEE_NOK = -1,
 +};
 +
-+
-+
 +struct ree_tee_status_req
 +{
 +    int32_t msg_type;
@@ -148,83 +146,43 @@ index 0000000000..daa99d44e3
 +    uint32_t status;
 +};
 +
-+struct ree_tee_rng_req
-+{
-+    int32_t msg_type;
-+    uint32_t length;
-+};
-+
-+struct ree_tee_rng_resp
++struct ree_tee_rng_cmd
 +{
 +    int32_t msg_type;
 +    uint32_t length;
 +    uint8_t response[RNG_SIZE_IN_BYTES];
 +};
 +
-+struct ree_tee_deviceid_req
-+{
-+    int32_t msg_type;
-+    uint32_t length;
-+};
-+
-+struct ree_tee_deviceid_resp
++struct ree_tee_deviceid_cmd
 +{
 +    int32_t msg_type;
 +    uint32_t length;
 +    uint8_t response[DEVICE_ID_LENGTH];
 +};
 +
-+
-+struct ree_tee_snvm_read_req
++struct ree_tee_snvm_cmd
 +{
 +    int32_t msg_type;
-+    uint32_t length;
-+    uint8_t user_key[USER_KEY_LENGTH];
-+    uint8_t page_number;
-+};
-+
-+struct ree_tee_snvm_read_resp
-+{
-+    int32_t msg_type;
-+    uint32_t length;
-+    uint8_t data[SNVM_PAGE_LENGTH];
-+};
-+
-+struct ree_tee_snvm_write_req
-+{
-+    int32_t msg_type;
-+    uint32_t length;
++    uint32_t length; /* actual data length, 236 for secure and 252 for plain*/
 +    uint8_t user_key[USER_KEY_LENGTH];
 +    uint8_t data[SNVM_PAGE_LENGTH];
 +    uint8_t page_number;
 +};
 +
-+struct ree_tee_snvm_write_resp
-+{
-+    int32_t msg_type;
-+    uint32_t length; 
-+};
-+
-+struct ree_tee_puf_req
++struct ree_tee_puf_cmd
 +{
 +    int32_t msg_type;
 +    uint32_t length;
 +    uint8_t request[PUF_CHALLENGE];
-+    uint8_t opcode;
-+};
-+
-+struct ree_tee_puf_resp
-+{
-+    int32_t msg_type;
-+    uint32_t length;
 +    uint8_t response[PUF_RESPONSE];
++    uint8_t opcode;
 +};
 diff --git a/package/soc_example/src/sel4_test.c b/package/soc_example/src/sel4_test.c
 new file mode 100644
-index 0000000000..27bcb012e5
+index 0000000000..a4f7629d85
 --- /dev/null
 +++ b/package/soc_example/src/sel4_test.c
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,345 @@
 +#include <stdio.h>
 +#include <sys/types.h>
 +#include <sys/stat.h>
@@ -281,43 +239,43 @@ index 0000000000..27bcb012e5
 +static int handle_snvm_write(uint8_t *input_data, uint8_t *key, int handle, int page, int mode)
 +{
 +    ssize_t ret;
-+    struct ree_tee_snvm_write_req req = {0};
-+    struct ree_tee_snvm_write_resp resp = {0};
++    struct ree_tee_snvm_cmd cmd = {0};
++
 +    /* Open binary file for input data*/
 +    if((!input_data) || (!handle) || (!key)){
 +        return -EINVAL;
 +    }
 +
-+    req.msg_type = REE_TEE_SNVM_WRITE_REQ;
++    cmd.msg_type = REE_TEE_SNVM_WRITE_REQ;
 +    /*
 +     * Length here means how much we are goint to write data, for secure
 +     * write we send 236 bytes and for plaintext 252 bytes
 +     */
 +    if (mode == PLAIN) {
-+        req.length = 252;
++        cmd.length = 252;
 +    } else if (mode == SECURE) {
-+        req.length = 236;
++        cmd.length = 236;
 +    } else {
 +        printf("Invalid mode\n");
 +        return -EINVAL;
 +    }
-+    req.page_number = page;
-+    memcpy(req.user_key, key, USER_KEY_LENGTH );
-+    memcpy(req.data, input_data, req.length);
++    cmd.page_number = page;
++    memcpy(cmd.user_key, key, USER_KEY_LENGTH );
++    memcpy(cmd.data, input_data, cmd.length);
 +
 +    /*Write message to TEE*/
-+    ret = write(handle, &req, sizeof(req));
-+    if (ret != sizeof(req))
++    ret = write(handle, &cmd, sizeof(cmd));
++    if (ret != sizeof(cmd))
 +    {
 +        printf("Writing snvm write request failed\n");
 +        return -EIO;
 +    }
 +
 +    do {
-+        ret = read(handle, &resp, sizeof(resp));
++        ret = read(handle, &cmd, sizeof(cmd));
 +    } while (ret < 0);
 +
-+    if (ret != sizeof(resp))
++    if (ret != sizeof(cmd))
 +    {
 +        printf("Reading snvm write response failed: %lu \n", ret);
 +        return -EIO;
@@ -329,37 +287,37 @@ index 0000000000..27bcb012e5
 +{
 +
 +    ssize_t ret;
-+    struct ree_tee_snvm_read_req req = {0};
-+    struct ree_tee_snvm_read_resp resp = {0};
-+    req.msg_type = REE_TEE_SNVM_READ_REQ;
++    struct ree_tee_snvm_cmd cmd = {0};
++
++    cmd.msg_type = REE_TEE_SNVM_READ_REQ;
 +
 +    /*
 +     * Length here means how much we are goint to read data, for secure
 +     * read we request 236 bytes and for plaintext 252 bytes
 +     */
 +    if (mode == PLAIN) {
-+        req.length = 252;
++        cmd.length = 252;
 +    } else if (mode == SECURE) {
-+        req.length = 236;
++        cmd.length = 236;
 +    } else {
 +        printf("Invalid mode\n");
 +        return -EINVAL;
 +    }
-+    req.page_number = page;
-+    memcpy(req.user_key, key, USER_KEY_LENGTH );
++    cmd.page_number = page;
++    memcpy(cmd.user_key, key, USER_KEY_LENGTH );
 +
-+    ret = write(handle, &req, sizeof(req));
-+    if (ret != sizeof(req))
++    ret = write(handle, &cmd, sizeof(cmd));
++    if (ret != sizeof(cmd))
 +    {
 +        printf("Writing snvm read request failed\n");
 +        return -EIO;
 +    }
 +
 +    do {
-+        ret = read(handle, &resp, sizeof(resp));
++        ret = read(handle, &cmd, sizeof(cmd));
 +    } while (ret < 0);
 +
-+    if (ret != sizeof(resp))
++    if (ret != sizeof(cmd))
 +    {
 +        printf("Reading snvm read response failed: %lu \n", ret);
 +        return -EIO;
@@ -367,13 +325,13 @@ index 0000000000..27bcb012e5
 +    if (output)
 +    {
 +        /* response data buffer is 252 bytes but actual data can be 236 or 252 bytes */
-+        memcpy(output, resp.data, req.length);
++        memcpy(output, cmd.data, cmd.length);
 +    }
 +    else
 +    {
 +        printf("\nsNVM page %d data:", page);
-+        for(int i = 0; i < req.length; i++) {
-+            printf("%2.2x ", resp.data[i]);
++        for(int i = 0; i < cmd.length; i++) {
++            printf("%2.2x ", cmd.data[i]);
 +        }
 +    }
 +    return 0;
@@ -382,25 +340,25 @@ index 0000000000..27bcb012e5
 +static int handle_puf_request(int handle, uint8_t opcode, uint8_t *challenge, uint8_t *output)
 +{
 +    ssize_t ret;
-+    struct ree_tee_puf_req req = {0};
-+    struct ree_tee_puf_resp resp = {0};
-+    req.msg_type = REE_TEE_PUF_REQ;
-+    req.length = sizeof(req);
-+    req.opcode = opcode;
-+    memcpy(req.request, challenge, PUF_CHALLENGE );
++    struct ree_tee_puf_cmd cmd = {0};
 +
-+    ret = write(handle, &req, sizeof(req));
-+    if (ret != sizeof(req))
++    cmd.msg_type = REE_TEE_PUF_REQ;
++    cmd.length = sizeof(cmd);
++    cmd.opcode = opcode;
++    memcpy(cmd.request, challenge, PUF_CHALLENGE );
++
++    ret = write(handle, &cmd, sizeof(cmd));
++    if (ret != sizeof(cmd))
 +    {
 +        printf("Writing puf request failed\n");
 +        return -EIO;
 +    }
 +
 +    do {
-+        ret = read(handle, &resp, sizeof(resp));
++        ret = read(handle, &cmd, sizeof(cmd));
 +    } while (ret < 0);
 +
-+    if (ret != sizeof(resp))
++    if (ret != sizeof(cmd))
 +    {
 +        printf("Reading puf response failed: %lu \n", ret);
 +        return -EIO;
@@ -408,13 +366,13 @@ index 0000000000..27bcb012e5
 +
 +    if (output)
 +    {
-+        memcpy(output, resp.response, PUF_RESPONSE);
++        memcpy(output, cmd.response, PUF_RESPONSE);
 +    }
 +    else
 +    {
 +        printf("\nPUF data:");
 +        for(int i = 0; i < PUF_RESPONSE; i++) {
-+            printf("%2.2x ", resp.response[i]);
++            printf("%2.2x ", cmd.response[i]);
 +        }
 +    }
 +    return 0;
@@ -424,15 +382,13 @@ index 0000000000..27bcb012e5
 +static int handle_deviceid_request(int f, uint8_t *output)
 +{
 +    ssize_t ret;
-+    struct ree_tee_deviceid_resp resp = {0};
-+    struct ree_tee_deviceid_req req ={
++    struct ree_tee_deviceid_cmd cmd ={
 +        .msg_type = REE_TEE_DEVICEID_REQ,
-+        .length = 1,
 +    };
 +
 +    /*Write message to TEE*/
-+    ret = write(f, &req, sizeof(req));
-+    if (ret != sizeof(req))
++    ret = write(f, &cmd, sizeof(cmd));
++    if (ret != sizeof(cmd))
 +    {
 +        printf("Writing deviceid request failed\n");
 +        return -EIO;
@@ -440,10 +396,10 @@ index 0000000000..27bcb012e5
 +
 +    /*Read Response , polling*/
 +    do {
-+        ret = read(f, &resp, sizeof(resp));
++        ret = read(f, &cmd, sizeof(cmd));
 +    } while (ret < 0);
 +
-+    if (ret != sizeof(resp))
++    if (ret != sizeof(cmd))
 +    {
 +        printf("Reading device id message failed: %lu \n", ret);
 +        return -EIO;
@@ -451,14 +407,14 @@ index 0000000000..27bcb012e5
 +
 +    if (output)
 +    {
-+        memcpy(output, resp.response, DEVICE_ID_LENGTH);
++        memcpy(output, cmd.response, DEVICE_ID_LENGTH);
 +    }
 +    else
 +    {
 +        /* print value*/
 +        printf("\nDeviceID: ");
 +        for(int i = 0; i < DEVICE_ID_LENGTH; i++) {
-+            printf("%2.2x", resp.response[i]);
++            printf("%2.2x", cmd.response[i]);
 +        }
 +    }
 +
@@ -468,15 +424,14 @@ index 0000000000..27bcb012e5
 +static int handle_rng_request(int f, uint8_t *output)
 +{
 +    ssize_t ret;
-+    struct ree_tee_rng_resp rngrsp = {0};
-+    struct ree_tee_rng_req rngrq ={
++
++    struct ree_tee_rng_cmd cmd ={
 +        .msg_type = REE_TEE_RNG_REQ,
-+        .length = 1,
 +    };
 +
 +    /*Write message to TEE*/
-+    ret = write(f, &rngrq, sizeof(rngrq));
-+    if (ret != sizeof(rngrq))
++    ret = write(f, &cmd, sizeof(cmd));
++    if (ret != sizeof(cmd))
 +    {
 +        printf("Writing rng request failed\n");
 +        return -EIO;
@@ -484,24 +439,24 @@ index 0000000000..27bcb012e5
 +
 +    /*Read Response , polling*/
 +    do {
-+        ret = read(f, &rngrsp, sizeof(rngrsp));
++        ret = read(f, &cmd, sizeof(cmd));
 +    } while (ret < 0);
 +
-+    if (ret != sizeof(rngrsp))
++    if (ret != sizeof(cmd))
 +    {
 +        printf("Reading rng message failed: %lu \n", ret);
 +        return -EIO;
 +    }
 +    if (output)
 +    {
-+        memcpy(output, rngrsp.response, RNG_SIZE_IN_BYTES);
++        memcpy(output, cmd.response, RNG_SIZE_IN_BYTES);
 +    }
 +    else
 +    {
 +        /* print value*/
 +        printf("\nRNG value:");
 +        for(int i = 0; i < RNG_SIZE_IN_BYTES; i++) {
-+            printf("%2.2x ", rngrsp.response[i]);
++            printf("%2.2x ", cmd.response[i]);
 +        }
 +    }
 +    return 0;
