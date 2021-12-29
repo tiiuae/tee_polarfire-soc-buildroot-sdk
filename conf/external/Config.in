@@ -1,0 +1,1 @@
+source "$BR2_EXTERNAL_SEL4_AMP_PATH/package/soc_example/Config.in"

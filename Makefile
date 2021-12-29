@@ -115,6 +115,7 @@ else ifeq "$(DEVKIT)" "icicle-kit-es-sel4"
 HSS_SUPPORT ?= y
 HSS_TARGET ?= mpfs-icicle-kit-es
 UBOOT_VERSION = 2021.10
+BUILDROOT_EXT = $(confdir)/external
 linux_defconfig := icicle_kit_sel4_defconfig
 linux_dtb := $(riscv_dtbdir)/microchip/microchip-mpfs-icicle-kit-sel4.dtb
 fit_config := $(confdir)/$(DEVKIT)/osbi-fit-image.its
@@ -174,7 +175,7 @@ $(buildroot_builddir_stamp): $(buildroot_srcdir) $(buildroot_patches)
 
 $(buildroot_initramfs_wrkdir)/.config: $(buildroot_builddir_stamp) $(confdir)/initramfs.txt $(buildroot_rootfs_config) $(buildroot_initramfs_config) $(uboot_s_cfg) $(uboot_s_txt)
 	cp $(buildroot_initramfs_config) $(buildroot_initramfs_wrkdir)/.config
-	$(MAKE) -C $(buildroot_builddir) RISCV=$(RISCV) PATH=$(PATH) O=$(buildroot_initramfs_wrkdir) olddefconfig CROSS_COMPILE=$(CROSS_COMPILE) -j$(num_threads)
+	$(MAKE) -C $(buildroot_builddir) RISCV=$(RISCV) PATH=$(PATH) O=$(buildroot_initramfs_wrkdir) BR2_EXTERNAL=$(BUILDROOT_EXT) olddefconfig CROSS_COMPILE=$(CROSS_COMPILE) -j$(num_threads)
 
 $(buildroot_initramfs_tar): $(buildroot_builddir_stamp) $(buildroot_initramfs_wrkdir)/.config $(CROSS_COMPILE)gcc $(buildroot_initramfs_config)
 	$(MAKE) -C $(buildroot_builddir) RISCV=$(RISCV) PATH=$(PATH) O=$(buildroot_initramfs_wrkdir) -j$(num_threads) DEVKIT=$(DEVKIT)
@@ -186,20 +187,20 @@ $(buildroot_initramfs_sysroot_stamp): $(buildroot_initramfs_tar)
 
 .PHONY: buildroot_initramfs_menuconfig
 buildroot_initramfs_menuconfig: $(buildroot_initramfs_wrkdir)/.config $(buildroot_builddir_stamp)
-	$(MAKE) -C $(buildroot_builddir) O=$(buildroot_initramfs_wrkdir) menuconfig
+	$(MAKE) -C $(buildroot_builddir) O=$(buildroot_initramfs_wrkdir) BR2_EXTERNAL=$(BUILDROOT_EXT) menuconfig
 	$(MAKE) -C $(buildroot_builddir) O=$(buildroot_initramfs_wrkdir) savedefconfig
 	cp $(buildroot_initramfs_wrkdir)/defconfig conf/buildroot_initramfs_config
 
 $(buildroot_rootfs_wrkdir)/.config: $(buildroot_builddir_stamp)
 	cp $(buildroot_rootfs_config) $@
-	$(MAKE) -C $(buildroot_builddir) RISCV=$(RISCV) PATH=$(PATH) O=$(buildroot_rootfs_wrkdir) olddefconfig
+	$(MAKE) -C $(buildroot_builddir) RISCV=$(RISCV) PATH=$(PATH) O=$(buildroot_rootfs_wrkdir) BR2_EXTERNAL=$(BUILDROOT_EXT) olddefconfig
 
 $(buildroot_rootfs_ext): $(buildroot_builddir_stamp) $(buildroot_rootfs_wrkdir)/.config $(CROSS_COMPILE)gcc $(buildroot_rootfs_config)
 	$(MAKE) -C $(buildroot_builddir) RISCV=$(RISCV) PATH=$(PATH) O=$(buildroot_rootfs_wrkdir) -j$(num_threads)
 
 .PHONY: buildroot_rootfs_menuconfig
 buildroot_rootfs_menuconfig: $(buildroot_rootfs_wrkdir)/.config $(buildroot_builddir_stamp)
-	$(MAKE) -C $(buildroot_builddir) O=$(buildroot_rootfs_wrkdir) menuconfig
+	$(MAKE) -C $(buildroot_builddir) O=$(buildroot_rootfs_wrkdir) BR2_EXTERNAL=$(BUILDROOT_EXT) menuconfig
 	$(MAKE) -C $(buildroot_builddir) O=$(buildroot_rootfs_wrkdir) savedefconfig
 	cp $(buildroot_rootfs_wrkdir)/defconfig conf/buildroot_rootfs_config
 
