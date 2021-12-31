@@ -50,7 +50,75 @@ static void print_menu(void)
     printf("3 - Read Data from sNVM\n");
     printf("4 - Device serial number\n");
     printf("5 - PUF demo\n");
+    printf("6 - seL4 status\n");
+    printf("7 - Unknown msg type\n");
     printf("\n");
+}
+
+static int handle_unknown_request(int handle)
+{
+    ssize_t ret;
+
+    struct ree_tee_status_req cmd = {
+        .hdr.msg_type = INVALID,
+        .hdr.length = HDR_LEN,
+    };
+
+    /*Write message to TEE*/
+    ret = write(handle, &cmd, cmd.hdr.length);
+    if (ret != cmd.hdr.length)
+    {
+        printf("Writing status request failed\n");
+        return -EIO;
+    }
+
+    /*Read Response , polling*/
+    do {
+        ret = read(handle, &cmd, HDR_LEN);
+    } while (ret < 0);
+
+    if (ret != HDR_LEN)
+    {
+        printf("Reading status message failed: %lu \n", ret);
+        return -EIO;
+    }
+
+    printf("msg status: %d\n", cmd.hdr.status);
+
+    return 0;
+}
+
+static int handle_status_request(int handle)
+{
+    ssize_t ret;
+
+    struct ree_tee_status_req cmd = {
+        .hdr.msg_type = REE_TEE_STATUS_REQ,
+        .hdr.length = HDR_LEN,
+    };
+
+    /*Write message to TEE*/
+    ret = write(handle, &cmd, cmd.hdr.length);
+    if (ret != cmd.hdr.length)
+    {
+        printf("Writing status request failed\n");
+        return -EIO;
+    }
+
+    /*Read Response , polling*/
+    do {
+        ret = read(handle, &cmd, HDR_LEN);
+    } while (ret < 0);
+
+    if (ret != HDR_LEN)
+    {
+        printf("Reading status message failed: %lu \n", ret);
+        return -EIO;
+    }
+
+    printf("msg status: %d\n", cmd.hdr.status);
+
+    return 0;
 }
 
 static int handle_snvm_write(uint8_t *input_data, uint8_t *key, int handle, int page, int mode)
@@ -342,6 +410,12 @@ int main(void)
             ret = handle_puf_request(f, page, puf_challenge, NULL);
 
         }
+        case 6:
+            ret = handle_status_request(f);
+            break;
+        case 7:
+            ret = handle_unknown_request(f);
+            break;
         default:
             break;
         }
