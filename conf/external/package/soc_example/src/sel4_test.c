@@ -37,6 +37,11 @@ static uint8_t test_data[] = {
 0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xCA, 0xFE, 0xCA, 0xFE, 0xAB, 0xBA, 0xFF
 };
 
+static uint8_t tmp_hash [] = {
+0x74, 0xf0, 0xdb, 0x99, 0x7d, 0xd3, 0x5a, 0xe9, 0x65, 0xab, 0x39, 0x74, 0x2e, 0x76, 0xf9, 0x30,
+0x20, 0x74, 0x11, 0xe5, 0xc6, 0x74, 0x26, 0x2f, 0xe4, 0xcc, 0xae, 0x53, 0xec, 0x0c, 0x2f, 0xac, 
+0x65, 0x24, 0xd0, 0x41, 0x9a, 0x34, 0x2b, 0x60, 0xb6, 0x76, 0xc0, 0x03, 0xaa, 0x2d, 0xf9, 0xbb 
+};
 
 //#define SEL4TEE "/dev/null"
 
@@ -52,6 +57,7 @@ static void print_menu(void)
     printf("5 - PUF demo\n");
     printf("6 - seL4 status\n");
     printf("7 - Unknown msg type\n");
+    printf("8 - Sign Service\n");
     printf("\n");
 }
 
@@ -72,7 +78,7 @@ static int handle_unknown_request(int handle)
         return -EIO;
     }
 
-    /*Read Response , polling*/
+    /*Read Response, polling*/
     do {
         ret = read(handle, &cmd, HDR_LEN);
     } while (ret < 0);
@@ -105,7 +111,7 @@ static int handle_status_request(int handle)
         return -EIO;
     }
 
-    /*Read Response , polling*/
+    /*Read Response, polling*/
     do {
         ret = read(handle, &cmd, HDR_LEN);
     } while (ret < 0);
@@ -268,6 +274,49 @@ static int handle_puf_request(int handle, uint8_t opcode, uint8_t *challenge, ui
 
 }
 
+static int handle_sign_request(int handle, uint8_t format, uint8_t *hash, uint8_t *output)
+{
+    ssize_t ret;
+    struct ree_tee_sign_cmd cmd = {
+        .hdr.msg_type = REE_TEE_SIGN_REQ,
+        .hdr.length = sizeof(struct ree_tee_sign_cmd),
+        .format = format,
+    };
+
+    memcpy(cmd.hash, hash, HASH_LENGTH );
+
+    ret = write(handle, &cmd, cmd.hdr.length);
+    if (ret != cmd.hdr.length)
+    {
+        printf("Writing puf request failed\n");
+        return -EIO;
+    }
+
+    do {
+        ret = read(handle, &cmd, sizeof(cmd));
+    } while (ret < 0);
+
+    if (ret != sizeof(cmd))
+    {
+        printf("Reading puf response failed: %lu \n", ret);
+        return -EIO;
+    }
+
+    if (output)
+    {
+        memcpy(output, cmd.response, SIGN_RESP_LENGTH);
+    }
+    else
+    {
+        printf("\nSigned data:");
+        for(int i = 0; i < SIGN_RESP_LENGTH; i++) {
+            printf("%2.2x ", cmd.response[i]);
+        }
+    }
+    return 0;
+
+}
+
 static int handle_deviceid_request(int f, uint8_t *output)
 {
     ssize_t ret;
@@ -284,7 +333,7 @@ static int handle_deviceid_request(int f, uint8_t *output)
         return -EIO;
     }
 
-    /*Read Response , polling*/
+    /*Read Response, polling*/
     do {
         ret = read(f, &cmd, sizeof(cmd));
     } while (ret < 0);
@@ -328,7 +377,7 @@ static int handle_rng_request(int f, uint8_t *output)
         return -EIO;
     }
 
-    /*Read Response , polling*/
+    /*Read Response, polling*/
     do {
         ret = read(f, &cmd, sizeof(cmd));
     } while (ret < 0);
@@ -416,6 +465,20 @@ int main(void)
         case 7:
             ret = handle_unknown_request(f);
             break;
+        case 8:
+        {
+            uint8_t format;
+            printf("\nEnter format (1 RAW, 0 DER): ");
+            scanf("%d", &format);
+            if (format)
+                handle_sign_request(f, RAW_FORMAT, tmp_hash, NULL);
+            else
+                handle_sign_request(f, DER_FORMAT, tmp_hash, NULL);
+
+
+
+        }
+
         default:
             break;
         }
