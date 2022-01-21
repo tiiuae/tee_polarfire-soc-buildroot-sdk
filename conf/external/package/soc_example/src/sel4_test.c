@@ -6,32 +6,12 @@
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
-#include <termios.h>
 #include <stdlib.h>
-#include <time.h>
-#include <poll.h>
-#include <sys/time.h>
-
 #include "ree_tee_msg.h"
+#include "sel4_tty_rpmsg.h"
 
 #define SECURE 0
 #define PLAIN  1
-
-#define SEL4TEE "/dev/sel4com"
-#define SEL4TTY "/dev/ttyRPMSG6"
-
-#define HDR_LEN     sizeof(struct ree_tee_hdr)
-
-#define SKIP_LEN_CHECK  0
-
-struct tty_msg {
-    char *send_buf;
-    size_t send_len;
-
-    char *recv_buf;
-    uint32_t recv_len;  /* expected response length (SKIP_LEN_CHECK) */
-    int32_t recv_msg;   /* expected response msg */
-};
 
 static uint8_t tmp_key[] = {0x76, 0xa4, 0x58, 0xd1, 0x0e, 0xd7, 0xc0, 0x9b, 0xf5, 0x0d, 0xd2, 0xb9};
 
@@ -59,8 +39,6 @@ static uint8_t tmp_hash [] = {
 0x20, 0x74, 0x11, 0xe5, 0xc6, 0x74, 0x26, 0x2f, 0xe4, 0xcc, 0xae, 0x53, 0xec, 0x0c, 0x2f, 0xac,
 0x65, 0x24, 0xd0, 0x41, 0x9a, 0x34, 0x2b, 0x60, 0xb6, 0x76, 0xc0, 0x03, 0xaa, 0x2d, 0xf9, 0xbb
 };
-
-//#define SEL4TEE "/dev/null"
 
 static void hexdump(void* mem, size_t len)
 {
@@ -98,44 +76,50 @@ static void print_menu(void)
     printf("7 - Unknown msg type\n");
     printf("8 - Sign Service\n");
     printf("9 - Generate keys\n");
-    printf("10 - Generate key and extract public key");
+    printf("10 - Generate key and extract public key\n");
     printf("\n");
 }
 
-static int handle_unknown_request(int handle)
+static int handle_unknown_request()
 {
     ssize_t ret;
 
     struct ree_tee_status_req cmd = {
-        .hdr.msg_type = INVALID,
+        .hdr.msg_type = REE_TEE_INVALID,
         .hdr.length = HDR_LEN,
     };
 
-    /*Write message to TEE*/
-    ret = write(handle, &cmd, cmd.hdr.length);
-    if (ret != cmd.hdr.length)
+    struct tty_msg tty = {
+        .send_buf = (void*)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = HDR_LEN,
+        .recv_msg = REE_TEE_INVALID,
+    };
+
+    struct ree_tee_status_req *resp = NULL;
+
+    ret = tty_req(&tty);
+    if (ret < 0)
     {
-        printf("Writing status request failed\n");
-        return -EIO;
+        printf("Message failed: %ld \n", ret);
+        goto out;
     }
 
-    /*Read Response, polling*/
-    do {
-        ret = read(handle, &cmd, HDR_LEN);
-    } while (ret < 0);
+    resp = (struct ree_tee_status_req*)tty.recv_buf;
 
-    if (ret != HDR_LEN)
-    {
-        printf("Reading status message failed: %lu \n", ret);
-        return -EIO;
+    printf("msg status: %d\n", resp->hdr.status);
+
+    ret = 0;
+out:
+    if (tty.recv_buf) {
+        free(tty.recv_buf);
     }
 
-    printf("msg status: %d\n", cmd.hdr.status);
-
-    return 0;
+    return ret;
 }
 
-static int handle_status_request(int handle)
+static int handle_status_request()
 {
     ssize_t ret;
 
@@ -144,31 +128,38 @@ static int handle_status_request(int handle)
         .hdr.length = HDR_LEN,
     };
 
-    /*Write message to TEE*/
-    ret = write(handle, &cmd, cmd.hdr.length);
-    if (ret != cmd.hdr.length)
+    struct tty_msg tty = {
+        .send_buf = (void*)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = HDR_LEN,
+        .recv_msg = REE_TEE_STATUS_RESP,
+    };
+
+    struct ree_tee_status_req *resp = NULL;
+
+    ret = tty_req(&tty);
+    if (ret < 0)
     {
-        printf("Writing status request failed\n");
-        return -EIO;
+        printf("Status message failed: %ld \n", ret);
+        goto out;
     }
 
-    /*Read Response, polling*/
-    do {
-        ret = read(handle, &cmd, HDR_LEN);
-    } while (ret < 0);
+    resp = (struct ree_tee_status_req*)tty.recv_buf;
 
-    if (ret != HDR_LEN)
-    {
-        printf("Reading status message failed: %lu \n", ret);
-        return -EIO;
+    printf("msg status: %d\n", resp->hdr.status);
+
+    ret = 0;
+
+out:
+    if (tty.recv_buf) {
+        free(tty.recv_buf);
     }
 
-    printf("msg status: %d\n", cmd.hdr.status);
-
-    return 0;
+    return ret;
 }
 
-static int handle_snvm_write(uint8_t *input_data, uint8_t *key, int handle, int page, int mode)
+static int handle_snvm_write(uint8_t *input_data, uint8_t *key, int page, int mode)
 {
     ssize_t ret;
     struct ree_tee_snvm_cmd cmd = {
@@ -176,8 +167,18 @@ static int handle_snvm_write(uint8_t *input_data, uint8_t *key, int handle, int 
         .hdr.length = sizeof(struct ree_tee_snvm_cmd),
     };
 
+    struct tty_msg tty = {
+        .send_buf = (void*)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = HDR_LEN,
+        .recv_msg = REE_TEE_SNVM_WRITE_RESP,
+    };
+
+    struct ree_tee_snvm_cmd *resp = NULL;
+
     /* Open binary file for input data*/
-    if((!input_data) || (!handle) || (!key)){
+    if((!input_data) || (!key)){
         return -EINVAL;
     }
 
@@ -197,27 +198,28 @@ static int handle_snvm_write(uint8_t *input_data, uint8_t *key, int handle, int 
     memcpy(cmd.user_key, key, USER_KEY_LENGTH );
     memcpy(cmd.data, input_data, cmd.snvm_length);
 
-    /*Write message to TEE*/
-    ret = write(handle, &cmd, cmd.hdr.length);
-    if (ret != cmd.hdr.length)
+    ret = tty_req(&tty);
+    if (ret < 0)
     {
-        printf("Writing snvm write request failed\n");
-        return -EIO;
+        printf("snvm write failed: %ld\n", ret);
+        goto out;
     }
 
-    do {
-        ret = read(handle, &cmd, HDR_LEN);
-    } while (ret < 0);
+    resp = (struct ree_tee_snvm_cmd*)tty.recv_buf;
 
-    if (ret != HDR_LEN)
-    {
-        printf("Reading snvm write response failed: %lu \n", ret);
-        return -EIO;
+    printf("msg status: %d\n", resp->hdr.status);
+
+    ret = 0;
+
+out:
+    if (tty.recv_buf) {
+        free(tty.recv_buf);
     }
-    return 0;
+
+    return ret;
 }
 
-static int handle_snvm_read(int handle, int page, uint8_t *key, uint8_t *output, int mode)
+static int handle_snvm_read(int page, uint8_t *key, uint8_t *output, int mode)
 {
 
     ssize_t ret;
@@ -225,6 +227,16 @@ static int handle_snvm_read(int handle, int page, uint8_t *key, uint8_t *output,
         .hdr.msg_type = REE_TEE_SNVM_READ_REQ,
         .hdr.length = sizeof(struct ree_tee_snvm_cmd),
     };
+
+    struct tty_msg tty = {
+        .send_buf = (void*)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = sizeof(cmd),
+        .recv_msg = REE_TEE_SNVM_READ_RESP,
+    };
+
+    struct ree_tee_snvm_cmd *resp = NULL;
 
     /*
      * Length here means how much we are goint to read data, for secure
@@ -241,38 +253,38 @@ static int handle_snvm_read(int handle, int page, uint8_t *key, uint8_t *output,
     cmd.page_number = page;
     memcpy(cmd.user_key, key, USER_KEY_LENGTH );
 
-    ret = write(handle, &cmd, cmd.hdr.length);
-    if (ret != cmd.hdr.length)
+    ret = tty_req(&tty);
+    if (ret < 0)
     {
-        printf("Writing snvm read request failed\n");
-        return -EIO;
+        printf("snvm read failed: %ld\n", ret);
+        goto out;
     }
 
-    do {
-        ret = read(handle, &cmd, sizeof(cmd));
-    } while (ret < 0);
+    resp = (struct ree_tee_snvm_cmd*)tty.recv_buf;
 
-    if (ret != sizeof(cmd))
-    {
-        printf("Reading snvm read response failed: %lu \n", ret);
-        return -EIO;
-    }
     if (output)
     {
         /* response data buffer is 252 bytes but actual data can be 236 or 252 bytes */
-        memcpy(output, cmd.data, cmd.snvm_length);
+        memcpy(output, resp->data, resp->snvm_length);
     }
     else
     {
         printf("\nsNVM page %d data:", page);
-        for(int i = 0; i < cmd.snvm_length; i++) {
-            printf("%2.2x ", cmd.data[i]);
+        for(int i = 0; i < resp->snvm_length; i++) {
+            printf("%2.2x ", resp->data[i]);
         }
     }
-    return 0;
+
+    ret = 0;
+out:
+    if (tty.recv_buf) {
+        free(tty.recv_buf);
+    }
+
+    return ret;
 }
 
-static int handle_puf_request(int handle, uint8_t opcode, uint8_t *challenge, uint8_t *output)
+static int handle_puf_request(uint8_t opcode, uint8_t *challenge, uint8_t *output)
 {
     ssize_t ret;
     struct ree_tee_puf_cmd cmd = {
@@ -281,41 +293,48 @@ static int handle_puf_request(int handle, uint8_t opcode, uint8_t *challenge, ui
         .opcode = opcode,
     };
 
+    struct tty_msg tty = {
+        .send_buf = (void*)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = sizeof(cmd),
+        .recv_msg = REE_TEE_PUF_RESP,
+    };
+
+    struct ree_tee_puf_cmd *resp = NULL;
+
     memcpy(cmd.request, challenge, PUF_CHALLENGE );
 
-    ret = write(handle, &cmd, cmd.hdr.length);
-    if (ret != cmd.hdr.length)
+    ret = tty_req(&tty);
+    if (ret < 0)
     {
-        printf("Writing puf request failed\n");
-        return -EIO;
+        printf("puf response failed: %ld\n", ret);
+        goto out;
     }
 
-    do {
-        ret = read(handle, &cmd, sizeof(cmd));
-    } while (ret < 0);
-
-    if (ret != sizeof(cmd))
-    {
-        printf("Reading puf response failed: %lu \n", ret);
-        return -EIO;
-    }
+    resp = (struct ree_tee_puf_cmd*)tty.recv_buf;
 
     if (output)
     {
-        memcpy(output, cmd.response, PUF_RESPONSE);
+        memcpy(output, resp->response, PUF_RESPONSE);
     }
     else
     {
-        printf("\nPUF data:");
-        for(int i = 0; i < PUF_RESPONSE; i++) {
-            printf("%2.2x ", cmd.response[i]);
-        }
+        printf("\nPUF data:\n");
+        hexdump(resp->response, PUF_RESPONSE);
     }
-    return 0;
 
+    ret = 0;
+
+out:
+    if (tty.recv_buf) {
+        free(tty.recv_buf);
+    }
+
+    return ret;
 }
 
-static int handle_sign_request(int handle, uint8_t format, uint8_t *hash, uint8_t *output)
+static int handle_sign_request(uint8_t format, uint8_t *hash, uint8_t *output)
 {
     ssize_t ret;
     struct ree_tee_sign_cmd cmd = {
@@ -324,84 +343,96 @@ static int handle_sign_request(int handle, uint8_t format, uint8_t *hash, uint8_
         .format = format,
     };
 
+    struct tty_msg tty = {
+        .send_buf = (void*)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = sizeof(cmd),
+        .recv_msg = REE_TEE_SIGN_RESP,
+    };
+
+    struct ree_tee_sign_cmd *resp = NULL;
+
     memcpy(cmd.hash, hash, HASH_LENGTH );
 
-    ret = write(handle, &cmd, cmd.hdr.length);
-    if (ret != cmd.hdr.length)
+    ret = tty_req(&tty);
+    if (ret < 0)
     {
-        printf("Writing puf request failed\n");
-        return -EIO;
+        printf("sign request failed: %ld\n", ret);
+        goto out;
     }
 
-    do {
-        ret = read(handle, &cmd, sizeof(cmd));
-    } while (ret < 0);
-
-    if (ret != sizeof(cmd))
-    {
-        printf("Reading puf response failed: %lu \n", ret);
-        return -EIO;
-    }
+    resp = (struct ree_tee_sign_cmd*)tty.recv_buf;
 
     if (output)
     {
-        memcpy(output, cmd.response, SIGN_RESP_LENGTH);
+        memcpy(output, resp->response, SIGN_RESP_LENGTH);
     }
     else
     {
-        printf("\nSigned data:");
-        for(int i = 0; i < SIGN_RESP_LENGTH; i++) {
-            printf("%2.2x ", cmd.response[i]);
-        }
+        printf("\nSigned data:\n");
+        hexdump(resp->response, SIGN_RESP_LENGTH);
     }
-    return 0;
 
+    ret = 0;
+out:
+    if (tty.recv_buf) {
+        free(tty.recv_buf);
+    }
+
+    return ret;
 }
 
-static int handle_deviceid_request(int f, uint8_t *output)
+static int handle_deviceid_request(uint8_t *output)
 {
-    ssize_t ret;
+    ssize_t ret = -1;
     struct ree_tee_deviceid_cmd cmd ={
         .hdr.msg_type = REE_TEE_DEVICEID_REQ,
         .hdr.length = HDR_LEN,
     };
 
-    /*Write message to TEE*/
-    ret = write(f, &cmd, cmd.hdr.length);
-    if (ret != cmd.hdr.length)
+    struct tty_msg tty = {
+        .send_buf = (void*)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = sizeof(cmd),
+        .recv_msg = REE_TEE_DEVICEID_RESP,
+    };
+
+    struct ree_tee_deviceid_cmd *resp = NULL;
+
+    ret = tty_req(&tty);
+    if (ret < 0)
     {
-        printf("Writing deviceid request failed\n");
-        return -EIO;
+        printf("device id failed: %ld\n", ret);
+        goto out;
     }
 
-    /*Read Response, polling*/
-    do {
-        ret = read(f, &cmd, sizeof(cmd));
-    } while (ret < 0);
-
-    if (ret != sizeof(cmd))
-    {
-        printf("Reading device id message failed: %lu \n", ret);
-        return -EIO;
-    }
+    resp = (struct ree_tee_deviceid_cmd *)tty.recv_buf;
 
     if (output)
     {
-        memcpy(output, cmd.response, DEVICE_ID_LENGTH);
+        memcpy(output, resp->response, DEVICE_ID_LENGTH);
     }
     else
     {
         /* print value*/
         printf("\nDeviceID: ");
         for(int i = 0; i < DEVICE_ID_LENGTH; i++) {
-            printf("%2.2x", cmd.response[i]);
+            printf("%2.2x", resp->response[i]);
         }
     }
 
-    return 0;
+    ret = 0;
+out:
+    if (tty.recv_buf) {
+        free(tty.recv_buf);
+    }
+
+    return ret;
 }
 
-static int handle_rng_request(int f, uint8_t *output)
+static int handle_rng_request(uint8_t *output)
 {
     ssize_t ret;
 
@@ -410,132 +441,162 @@ static int handle_rng_request(int f, uint8_t *output)
         .hdr.length = HDR_LEN,
     };
 
-    /*Write message to TEE*/
-    ret = write(f, &cmd, cmd.hdr.length);
-    if (ret != cmd.hdr.length)
-    {
-        printf("Writing rng request failed\n");
-        return -EIO;
+    struct tty_msg tty = {
+        .send_buf = (void*)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = sizeof(cmd),
+        .recv_msg = REE_TEE_RNG_RESP,
+    };
+
+    struct ree_tee_rng_cmd *resp = NULL;
+
+    ret = tty_req(&tty);
+    if (ret < 0) {
+        printf("rng request failed: %ld\n", ret);
+        goto out;
     }
 
-    /*Read Response, polling*/
-    do {
-        ret = read(f, &cmd, sizeof(cmd));
-    } while (ret < 0);
+    resp = (struct ree_tee_rng_cmd *)tty.recv_buf;
 
-    if (ret != sizeof(cmd))
-    {
-        printf("Reading rng message failed: %lu \n", ret);
-        return -EIO;
-    }
+
     if (output)
     {
-        memcpy(output, cmd.response, RNG_SIZE_IN_BYTES);
+        memcpy(output, resp->response, RNG_SIZE_IN_BYTES);
     }
     else
     {
         /* print value*/
         printf("\nRNG value:");
         for(int i = 0; i < RNG_SIZE_IN_BYTES; i++) {
-            printf("%2.2x ", cmd.response[i]);
+            printf("%2.2x ", resp->response[i]);
         }
     }
-    return 0;
+
+    ret = 0;
+out:
+    if (tty.recv_buf) {
+        free(tty.recv_buf);
+    }
+
+    return ret;
 }
 
 
-static int handle_key_creation_request(int f, uint32_t format, uint32_t nbits, const char *name, uint8_t *output, uint32_t *ouput_len)
+static int handle_key_creation_request(uint32_t format, uint32_t nbits, uint32_t clientid, const char *name, uint8_t *output, uint32_t *ouput_len)
 {
-    ssize_t ret;
-    int i;
-    uint8_t resp[4096];
+    int ret = -1;
 
     struct ree_tee_key_resp_cmd *ret_cmd;
+
     struct ree_tee_key_req_cmd cmd ={
         .hdr.msg_type = REE_TEE_GEN_KEY_REQ,
         .hdr.length = sizeof(struct ree_tee_key_req_cmd ),
         .key_req_info.format = format,
         .key_req_info.key_nbits = nbits,
+        .key_req_info.client_id = clientid,
+    };
+
+    struct tty_msg tty = {
+        .send_buf = (void*)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = SKIP_LEN_CHECK,
+        .recv_msg = REE_TEE_GEN_KEY_RESP,
     };
 
     strcpy(cmd.key_req_info.name, name);
 
-    /*Write message to TEE*/
-    ret = write(f, &cmd, cmd.hdr.length);
-    if (ret != cmd.hdr.length)
+    ret = tty_req(&tty);
+    if (ret < 0)
+        goto out;
+
+    if (ret < sizeof(struct ree_tee_key_resp_cmd))
     {
-        printf("Writing key pair request failed\n");
-        return -EIO;
+        printf("Invalid msg size: %d\n", ret);
+        ret = -EINVAL;
+        goto out;
     }
 
-    /*Read Response, polling*/
-    do {
-        ret = read(f, resp, sizeof(resp));
-    } while (ret < 0);
+    ret_cmd = (struct ree_tee_key_resp_cmd*)tty.recv_buf;
 
-    ret_cmd = (struct ree_tee_key_resp_cmd*)resp;
-
-    printf("Pub Key length = %d, priv key length = %d", ret_cmd->key_data_info.pubkey_length, ret_cmd->key_data_info.privkey_length);
+    printf("Pub Key length = %d, priv key length = %d\n", ret_cmd->key_data_info.pubkey_length, ret_cmd->key_data_info.privkey_length);
 
     uint8_t *public_key = &ret_cmd->key_data.keys[0];
     uint8_t *private_key = &ret_cmd->key_data.keys[ret_cmd->key_data_info.pubkey_length];
-
 
     if (output)
     {
         printf("Storage blob size = %d\n", ret_cmd->key_data.storage_size);
         memcpy(output, &ret_cmd->key_data, ret_cmd->key_data.storage_size);
         *ouput_len = ret_cmd->key_data.storage_size;
-
-
     }
     else
     {
-        for  (i = 0; i <  ret_cmd->key_data_info.pubkey_length ; i++)
-        {
-            printf("PubKey[%d] = 0x%x\n",i, public_key[i]);
-        }
+        printf("PubKey\n");
+        hexdump(public_key, ret_cmd->key_data_info.pubkey_length);
 
-        for (i = 0; i < ret_cmd->key_data_info.privkey_length ; i++)
-        {
-            printf("PrivateKey[%d] = 0x%x\n",i, private_key[i]);
-        }
+        printf("PrivateKey\n");
+        hexdump(private_key, ret_cmd->key_data_info.privkey_length);
     }
 
-    return 0;
+    ret = 0;
+out:
+
+    if (tty.recv_buf) {
+        free(tty.recv_buf);
+    }
+
+    return ret;
 }
 
-static int handle_publick_key_extraction_request(int f, uint8_t *key_blob, uint32_t blob_size, uint32_t clientid, uint8_t *guid, uint32_t *nbits,  uint8_t *output, uint32_t *pubkey_len)
+static int handle_publick_key_extraction_request(uint8_t *key_blob, uint32_t blob_size, uint32_t clientid, uint8_t *guid, uint32_t *nbits,  uint8_t *output, uint32_t *pubkey_len)
 {
     ssize_t ret;
-    int i;
-    uint8_t buf[4096] = {0};
 
-    struct ree_tee_pub_key_resp_cmd *ret_cmd;
-    struct ree_tee_pub_key_req_cmd *cmd = (struct ree_tee_pub_key_req_cmd *)buf;
+    struct tty_msg tty = {0};
 
+    struct ree_tee_pub_key_resp_cmd *ret_cmd = NULL;
+    struct ree_tee_pub_key_req_cmd *cmd = NULL;
+
+    uint32_t cmd_len = sizeof(struct ree_tee_pub_key_req_cmd) + blob_size;
+
+    printf("cmd_len: %d\n", cmd_len);
+
+    cmd = malloc(cmd_len);
+    if (!cmd)
+    {
+        printf("ERROR: out of memory: %d\n", __LINE__);
+        ret = -ENOMEM;
+        goto out;
+    }
+    memset(cmd, 0x0, cmd_len);
 
     cmd->hdr.msg_type = REE_TEE_EXT_PUBKEY_REQ;
-    cmd->hdr.length = sizeof(struct ree_tee_pub_key_req_cmd) + blob_size;
+    cmd->hdr.length = cmd_len;
     cmd->client_id = clientid;
 
     memcpy(&cmd->crypted_key_data[0], key_blob, blob_size);
-    memcpy(cmd->guid, guid, 32);
+    memcpy(cmd->guid, guid, sizeof(cmd->guid));
 
-    /*Write message to TEE*/
-    ret = write(f, buf, cmd->hdr.length);
-    if (ret != cmd->hdr.length)
+    tty.send_buf = (void*)cmd;
+    tty.send_len = cmd->hdr.length;
+    tty.recv_buf = NULL;
+    tty.recv_len = SKIP_LEN_CHECK;
+    tty.recv_msg = REE_TEE_EXT_PUBKEY_RESP;
+
+    ret = tty_req(&tty);
+    if (ret < 0)
+        goto out;
+
+    if (ret < sizeof(struct ree_tee_pub_key_resp_cmd))
     {
-        printf("Writing public key request failed\n");
-        return -EIO;
+        printf("Invalid msg size: %ld\n", ret);
+        ret = -EINVAL;
+        goto out;
     }
 
-    /*Read Response, polling*/
-    do {
-        ret = read(f, buf, sizeof(buf));
-    } while (ret < 0);
-
-     ret_cmd = (struct ree_tee_pub_key_resp_cmd*)buf;
+     ret_cmd = (struct ree_tee_pub_key_resp_cmd*)tty.recv_buf;
 
      printf("Publick key data Name = %s Length = %d\n", ret_cmd->key_info.name, ret_cmd->key_info.pubkey_length);
 
@@ -544,29 +605,28 @@ static int handle_publick_key_extraction_request(int f, uint8_t *key_blob, uint3
         *nbits = ret_cmd->key_info.key_nbits;
         *pubkey_len = ret_cmd->key_info.pubkey_length;
     } else {
-        uint8_t *public_key = &ret_cmd->pubkey[0];
-        for  (i = 0; i <  ret_cmd->key_info.pubkey_length ; i++)
-        {
-            printf("PubKey[%d] = 0x%x\n",i, public_key[i]);
-        }
 
+        uint8_t *public_key = &ret_cmd->pubkey[0];
+        printf("PubKey\n");
+        hexdump(public_key, ret_cmd->key_info.pubkey_length);
     }
 
+    ret = 0;
+
+out:
+    if (cmd)
+        free(cmd);
+
+    return ret;
 }
+
 int main(void)
 {
-    int f;
     int choice;
     int i = 1;
     int page = 0;
     int ret = 0;
     int mode = 0;
-    f = open(SEL4TEE, O_RDWR);
-    if(!f)
-    {
-        printf("failed to open %s\n", SEL4TEE);
-        return -EIO;
-    }
     while (i)
     {
         print_menu();
@@ -578,24 +638,24 @@ int main(void)
             i = 0;
             break;
         case 1:
-                ret = handle_rng_request(f, NULL);
+                ret = handle_rng_request(NULL);
             break;
         case 2:
             printf("\nEnter page to write: ");
             scanf("%d", &page);
             printf("\nEnter mode (1 PLAIN, 0 SECURE): ");
             scanf("%d", &mode);
-            ret = handle_snvm_write(test_data, tmp_key, f, page, mode);
+            ret = handle_snvm_write(test_data, tmp_key, page, mode);
         break;
         case 3:
             printf("\nEnter page to read: ");
 	        scanf("%d", &page);
             printf("\nEnter mode (1 PLAIN, 0 SECURE): ");
             scanf("%d", &mode);
-            ret = handle_snvm_read(f, page, tmp_key, NULL, mode);
+            ret = handle_snvm_read(page, tmp_key, NULL, mode);
         break;
         case 4:
-            ret = handle_deviceid_request(f, NULL);
+            ret = handle_deviceid_request(NULL);
         break;
         case 5:
         {
@@ -603,19 +663,22 @@ int main(void)
             printf("\nEnter opcode for PUF: ");
 	        scanf("%d", &page);
             /*set device serial as puf challenge*/
-            ret = handle_deviceid_request(f,puf_challenge);
+            ret = handle_deviceid_request(puf_challenge);
             if (ret)
+            {
+                printf("ERROR handle_deviceid_request: %d", ret);
                 break;
+            }
 
-            ret = handle_puf_request(f, page, puf_challenge, NULL);
+            ret = handle_puf_request(page, puf_challenge, NULL);
 
         }
         break;
         case 6:
-            ret = handle_status_request(f);
+            ret = handle_status_request();
         break;
         case 7:
-            ret = handle_unknown_request(f);
+            ret = handle_unknown_request();
         break;
         case 8:
         {
@@ -623,13 +686,13 @@ int main(void)
             printf("\nEnter format (1 RAW, 0 DER): ");
             scanf("%d", &format);
             if (format)
-                handle_sign_request(f, RAW_FORMAT, tmp_hash, NULL);
+                handle_sign_request(RAW_FORMAT, tmp_hash, NULL);
             else
-                handle_sign_request(f, DER_FORMAT, tmp_hash, NULL);
+                handle_sign_request(DER_FORMAT, tmp_hash, NULL);
         }
         break;
         case 9:
-            ret =  handle_key_creation_request(f, KEY_RSA, 3072, "Kekkonen", NULL, NULL);
+            ret =  handle_key_creation_request(KEY_RSA, 3072, 0x11111111, "Kekkonen", NULL, NULL);
         break;
         case 10:
         {
@@ -637,14 +700,15 @@ int main(void)
             uint8_t guid[32] = {0};
             uint32_t nbits;
             uint32_t key_data_len;
-            ret =  handle_key_creation_request(f, KEY_RSA, 3072, "Krypt_test", key_data, &key_data_len);
+            ret =  handle_key_creation_request(KEY_RSA, 3072, 0xEEEEEEEE, "Krypt_test", key_data, &key_data_len);
             printf("Key blob size = %d\n", key_data_len);
             if (!ret)
             {
-                handle_publick_key_extraction_request(f, key_data, key_data_len, 0, guid, &nbits, NULL, NULL);
+                handle_publick_key_extraction_request(key_data, key_data_len, 0xEEEEEEEE, guid, &nbits, NULL, NULL);
             }
 
         }
+        break;
         default:
         break;
         }

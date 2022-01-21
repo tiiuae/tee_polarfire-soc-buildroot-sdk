@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#ifndef _REE_TEE_MSG_H_
+#define _REE_TEE_MSG_H_
+
 #define RNG_SIZE_IN_BYTES 32
 #define SNVM_PAGE_LENGTH  252
 #define USER_KEY_LENGTH   12
@@ -161,3 +164,5 @@ struct ree_tee_pub_key_resp_cmd
     struct ree_tee_key_info key_info;
     uint8_t pubkey[0];
 };
+
+#endif /* _REE_TEE_MSG_H_ */
