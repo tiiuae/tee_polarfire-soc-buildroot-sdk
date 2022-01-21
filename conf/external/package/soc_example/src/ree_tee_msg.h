@@ -37,7 +37,7 @@ enum ree_tee_msg {
     REE_TEE_GEN_KEY_RESP,
     REE_TEE_EXT_PUBKEY_REQ,
     REE_TEE_EXT_PUBKEY_RESP,
-    INVALID = -1,
+    REE_TEE_INVALID = -1,
 };
 
 enum tee_status {
@@ -45,6 +45,7 @@ enum tee_status {
     TEE_UNKNOWN_MSG,
     TEE_INVALID_MSG_SIZE,
     TEE_IPC_CMD_ERR,
+    TEE_OUT_OF_MEMORY,
     TEE_OK = 1,
 };
 
@@ -112,8 +113,6 @@ struct ree_tee_sign_cmd
     uint8_t response[SIGN_RESP_LENGTH];
     uint8_t format;
 };
-
-
 
 struct ree_tee_key_info
 {

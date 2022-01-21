@@ -6,6 +6,11 @@
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
+#include <termios.h>
+#include <stdlib.h>
+#include <time.h>
+#include <poll.h>
+#include <sys/time.h>
 
 #include "ree_tee_msg.h"
 
@@ -13,8 +18,20 @@
 #define PLAIN  1
 
 #define SEL4TEE "/dev/sel4com"
+#define SEL4TTY "/dev/ttyRPMSG6"
 
 #define HDR_LEN     sizeof(struct ree_tee_hdr)
+
+#define SKIP_LEN_CHECK  0
+
+struct tty_msg {
+    char *send_buf;
+    size_t send_len;
+
+    char *recv_buf;
+    uint32_t recv_len;  /* expected response length (SKIP_LEN_CHECK) */
+    int32_t recv_msg;   /* expected response msg */
+};
 
 static uint8_t tmp_key[] = {0x76, 0xa4, 0x58, 0xd1, 0x0e, 0xd7, 0xc0, 0x9b, 0xf5, 0x0d, 0xd2, 0xb9};
 
@@ -44,6 +61,27 @@ static uint8_t tmp_hash [] = {
 };
 
 //#define SEL4TEE "/dev/null"
+
+static void hexdump(void* mem, size_t len)
+{
+    uint8_t *ch = (uint8_t*)mem;
+
+    for (size_t i = 0; i < len; i++)
+    {
+        if (i % 16 == 0) {
+            if (i != 0) {
+                printf("\n");
+            }
+            printf("%p: 0x%02x", ch, *ch);
+        } 
+        else {
+            printf(" 0x%02x", *ch);
+        }
+
+        ch++;
+    }
+    printf("\n");
+}
 
 static void print_menu(void)
 {
