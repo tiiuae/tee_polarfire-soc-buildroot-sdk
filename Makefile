@@ -329,7 +329,7 @@ endif
 $(hss_uboot_payload_bin): $(uboot_s) $(hss_payload_generator) $(bootloaders-y) $(payload_copy)
 	cd $(buildroot_initramfs_wrkdir)/images && $(hss_payload_generator) -c $(payload_config) -vv $(hss_uboot_payload_bin)
 
-.PHONY: buildroot_initramfs_sysroot vmlinux bbl fit flash_image initrd opensbi u-boot bootloaders dtbs
+.PHONY: buildroot_initramfs_sysroot vmlinux bbl fit flash_image initrd opensbi u-boot bootloaders dtbs compile_toolchain
 buildroot_initramfs_sysroot: $(buildroot_initramfs_sysroot)
 vmlinux: $(vmlinux)
 fit: $(fit)
@@ -341,6 +341,7 @@ fsbl: $(fsbl)
 bootloaders: $(bootloaders-y)
 root-fs: $(rootfs)
 dtbs: ${device_tree_blob}
+compile_toolchain: $(CROSS_COMPILE)gcc
 
 .PHONY: clean distclean
 clean:
