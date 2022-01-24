@@ -1,3 +1,8 @@
+/*
+ * Copyright 2022, Unikie
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -40,25 +45,35 @@ static uint8_t tmp_hash [] = {
 0x65, 0x24, 0xd0, 0x41, 0x9a, 0x34, 0x2b, 0x60, 0xb6, 0x76, 0xc0, 0x03, 0xaa, 0x2d, 0xf9, 0xbb
 };
 
-static void hexdump(void* mem, size_t len)
+static void hexdump(void* data, size_t size)
 {
-    uint8_t *ch = (uint8_t*)mem;
+    char ascii[17] = { 0 };
 
-    for (size_t i = 0; i < len; i++)
+    for (int i = 0; i < size; ++i)
     {
-        if (i % 16 == 0) {
-            if (i != 0) {
-                printf("\n");
-            }
-            printf("%p: 0x%02x", ch, *ch);
-        } 
-        else {
-            printf(" 0x%02x", *ch);
-        }
+        printf("%02X ", ((unsigned char*)data)[i]);
+        if (((unsigned char*)data)[i] >= ' ' && ((unsigned char*)data)[i] <= '~')
+            ascii[i % 16] = ((unsigned char*)data)[i];
+        else
+            ascii[i % 16] = '.';
 
-        ch++;
+        if ((i+1) % 8 != 0 &&
+            i+1 != size)
+            continue;
+
+        printf(" ");
+        if ((i+1) % 16 == 0)
+            printf("|  %s \n", ascii);
+        else if (i+1 == size)
+        {
+            ascii[(i+1) % 16] = '\0';
+            if ((i+1) % 16 <= 8)
+                printf(" ");
+            for (int j = (i+1) % 16; j < 16; ++j)
+                printf("   ");
+            printf("|  %s \n", ascii);
+        }
     }
-    printf("\n");
 }
 
 static void print_menu(void)
