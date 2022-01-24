@@ -5,8 +5,8 @@ CFLAGS = -g -Werror -Wall # -Wpedantic ISO C forbids zero-size array 'keys' [-We
 
 .PHONY: clean
 
-all: sel4_test.c
-	$(CC) $(CFLAGS) -o sel4-demo sel4_test.c sel4_tty_rpmsg.c
+all: sel4_tool.c
+	$(CC) $(CFLAGS) -o sel4-tool sel4_tool.c sel4_tty_rpmsg.c
 
 clean:
-	$(RM) sel4-demo
+	$(RM) sel4-tool

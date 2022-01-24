@@ -1,0 +1,2 @@
+config BR2_PACKAGE_SEL4_TOOL
+    bool "seL4 tool"
