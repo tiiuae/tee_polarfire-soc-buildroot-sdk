@@ -498,7 +498,7 @@ out:
 }
 
 
-static int handle_key_creation_request(uint32_t format, uint32_t nbits, uint32_t clientid, const char *name, uint8_t *output, uint32_t *ouput_len)
+static int handle_key_creation_request(uint32_t format, uint32_t nbits, uint32_t clientid, const char *name, uint8_t **output, uint32_t *output_len)
 {
     int ret = -1;
 
@@ -543,8 +543,15 @@ static int handle_key_creation_request(uint32_t format, uint32_t nbits, uint32_t
     if (output)
     {
         printf("Storage blob size = %d\n", ret_cmd->key_data.storage_size);
-        memcpy(output, &ret_cmd->key_data, ret_cmd->key_data.storage_size);
-        *ouput_len = ret_cmd->key_data.storage_size;
+        *output = malloc(ret_cmd->key_data.storage_size);
+        if (!*output)
+        {
+            printf("Out of memory: %s: %d\n", __FUNCTION__, __LINE__);
+            ret = -ENOMEM;
+            goto out;
+        }
+        memcpy(*output, &ret_cmd->key_data, ret_cmd->key_data.storage_size);
+        *output_len = ret_cmd->key_data.storage_size;
     }
     else
     {
@@ -565,7 +572,7 @@ out:
     return ret;
 }
 
-static int handle_publick_key_extraction_request(uint8_t *key_blob, uint32_t blob_size, uint32_t clientid, uint8_t *guid, uint32_t *nbits,  uint8_t *output, uint32_t *pubkey_len)
+static int handle_publick_key_extraction_request(uint8_t *key_blob, uint32_t blob_size, uint32_t clientid, uint8_t *guid, uint32_t *nbits,  uint8_t **output, uint32_t *pubkey_len)
 {
     ssize_t ret;
 
@@ -611,16 +618,22 @@ static int handle_publick_key_extraction_request(uint8_t *key_blob, uint32_t blo
         goto out;
     }
 
-     ret_cmd = (struct ree_tee_pub_key_resp_cmd*)tty.recv_buf;
+    ret_cmd = (struct ree_tee_pub_key_resp_cmd*)tty.recv_buf;
 
-     printf("Publick key data Name = %s Length = %d\n", ret_cmd->key_info.name, ret_cmd->key_info.pubkey_length);
+    printf("Publick key data Name = %s Length = %d\n", ret_cmd->key_info.name, ret_cmd->key_info.pubkey_length);
 
     if (output) {
-        memcpy(output, &ret_cmd->pubkey, ret_cmd->key_info.pubkey_length);
+        *output = malloc(ret_cmd->key_info.pubkey_length);
+        if (!*output)
+        {
+            printf("Out of memory: %s: %d\n", __FUNCTION__, __LINE__);
+            ret = -ENOMEM;
+            goto out;
+        }
+        memcpy(*output, &ret_cmd->pubkey, ret_cmd->key_info.pubkey_length);
         *nbits = ret_cmd->key_info.key_nbits;
         *pubkey_len = ret_cmd->key_info.pubkey_length;
     } else {
-
         uint8_t *public_key = &ret_cmd->pubkey[0];
         printf("PubKey\n");
         hexdump(public_key, ret_cmd->key_info.pubkey_length);
@@ -711,17 +724,18 @@ int main(void)
         break;
         case 10:
         {
-            uint8_t key_data[4096];
+            uint8_t *key_data = NULL;
             uint8_t guid[32] = {0};
             uint32_t nbits;
             uint32_t key_data_len;
-            ret =  handle_key_creation_request(KEY_RSA, 3072, 0xEEEEEEEE, "Krypt_test", key_data, &key_data_len);
+            ret =  handle_key_creation_request(KEY_RSA, 3072, 0xEEEEEEEE, "Krypt_test", &key_data, &key_data_len);
             printf("Key blob size = %d\n", key_data_len);
             if (!ret)
             {
                 handle_publick_key_extraction_request(key_data, key_data_len, 0xEEEEEEEE, guid, &nbits, NULL, NULL);
             }
-
+            if (key_data)
+                free(key_data);
         }
         break;
         default:
