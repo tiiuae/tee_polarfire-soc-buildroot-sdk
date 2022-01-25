@@ -109,3 +109,54 @@ out:
     return err;
 }
 
+static void print_usage()
+{
+    printf("Usage:\n");
+    printf("    -i storage_path        Path to load storage blob\n");
+    printf("    -o storage_path        Path to store storage blob\n");
+    printf("    -c tool_cmd            Run sel4-tool cmd\n");
+}
+
+int sel4_tool_parse_opts(int argc, char* argv[], char **infile, char **outfile, uint32_t *cmd)
+{
+    int opt = 0;
+
+    char *str_opt = NULL;
+
+    while ((opt = getopt(argc, argv, "i:o:c:")) != -1)
+    {
+        switch (opt) {
+        case 'i':
+            str_opt = malloc(strlen(optarg) + 1);
+            if (!str_opt)
+            {
+                printf("ERROR out of memory: %s: %d\n", __FUNCTION__, __LINE__);
+                return -ENOMEM;
+            }
+            strncpy(str_opt, optarg, strlen(optarg) + 1);
+            *infile = str_opt;
+            break;
+
+        case 'o':
+            str_opt = malloc(strlen(optarg) + 1);
+            if (!str_opt)
+            {
+                printf("ERROR out of memory: %s: %d\n", __FUNCTION__, __LINE__);
+                return -ENOMEM;
+            }
+            strncpy(str_opt, optarg, strlen(optarg) + 1);
+            *outfile = str_opt;
+            break;
+
+        case 'c':
+            *cmd = atoi(optarg);
+            break;
+
+        default:
+            print_usage();
+            return -EPERM;
+        }
+    }
+
+    return 0;
+}

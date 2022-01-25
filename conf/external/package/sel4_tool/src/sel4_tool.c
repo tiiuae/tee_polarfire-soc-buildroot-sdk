@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include "ree_tee_msg.h"
 #include "sel4_tty_rpmsg.h"
+#include "sel4_tool_cmdline.h"
 
 #define SECURE 0
 #define PLAIN  1
@@ -648,13 +649,128 @@ out:
     return ret;
 }
 
-int main(void)
+static int cmdline(int argc, char* argv[])
+{
+    int ret = -1;
+
+    char *in_file = NULL;
+    char *out_file = NULL;
+    uint32_t tool_cmd = TOOL_CMD_INVALID;
+
+    uint8_t *blob = NULL;
+    uint32_t blob_size = 0;
+    uint8_t *pubkey_bin = NULL;
+    uint32_t pubkey_len = 0;
+
+    uint8_t guid[32] = {0};
+    uint32_t nbits = 0;
+
+    ret = sel4_tool_parse_opts(argc, argv, &in_file, &out_file, &tool_cmd);
+    if (ret)
+        goto out;
+
+    switch (tool_cmd)
+    {
+    case TOOL_CMD_GENERATE_KEYS:
+        printf("TOOL_CMD_GENERATE_KEYS\n");
+        if (!out_file)
+        {
+            printf("ERROR no out file defined\n");
+            ret = -EINVAL;
+            goto out;
+        }
+
+        printf("out_file: %s\n", out_file);
+
+        ret = handle_key_creation_request(KEY_RSA,
+                                          3072,
+                                          0xEEEEEEEE,
+                                          "Kekkonen",
+                                          &blob,
+                                          &blob_size);
+        if (ret)
+            goto out;
+        
+        printf("Storage blob\n");
+        hexdump(blob, blob_size);
+
+        ret = sel4_tool_save_file(out_file, blob, blob_size);
+        goto out;
+
+    case TOOL_CMD_EXPORT_KEY:
+        printf("TOOL_CMD_EXPORT_KEY\n");
+        if (!in_file)
+        {
+            printf("ERROR no in file defined\n");
+            ret = -EINVAL;
+            goto out;
+        }
+
+        if (!out_file)
+        {
+            printf("ERROR no out file defined\n");
+            ret = -EINVAL;
+            goto out;
+        }
+
+        printf("in_file: %s\n", in_file);
+        printf("out_file: %s\n", out_file);
+
+        ret = sel4_tool_load_file(in_file, &blob, &blob_size);
+        if (ret)
+            goto out;
+
+        ret = handle_publick_key_extraction_request(blob,
+                                                    blob_size,
+                                                    0xEEEEEEEE,
+                                                    guid,
+                                                    &nbits,
+                                                    &pubkey_bin,
+                                                    &pubkey_len);
+        if (ret)
+            goto out;
+
+        printf("pubkey_bin\n");
+        hexdump(pubkey_bin, pubkey_len);
+
+        ret = sel4_tool_save_file(out_file, pubkey_bin, pubkey_len);
+        goto out;
+
+    default:
+        /* No cmd */
+        break;
+    }
+
+out:
+    if (in_file)
+        free(in_file);
+
+    if (out_file)
+        free(out_file);
+
+    if (blob)
+        free(blob);
+
+    if (pubkey_bin)
+        free(pubkey_bin);
+
+    return ret;
+}
+
+int main(int argc, char* argv[])
 {
     int choice;
     int i = 1;
     int page = 0;
     int ret = 0;
     int mode = 0;
+
+    if (argc > 1)
+    {
+        ret = cmdline(argc, argv);
+        return ret;
+    }
+
     while (i)
     {
         print_menu();
@@ -743,7 +859,5 @@ int main(void)
         }
     }
 
-
-return ret;
-
+    return ret;
 }
