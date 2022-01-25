@@ -57,7 +57,7 @@ kernel-modules-stamp := $(wrkdir)/.modules_stamp
 kernel-modules-install-stamp := $(wrkdir)/.modules_install_stamp
 
 flash_image := $(wrkdir)/$(DEVKIT)-$(GITID).gpt
-vfat_image := $(wrkdir)/$(DEVKIT)-vfat.part
+vfat_image ?= $(wrkdir)/$(DEVKIT)-vfat.part
 initramfs := $(wrkdir)/initramfs.cpio.gz
 rootfs := $(wrkdir)/rootfs.bin
 fit_config := $(confdir)/osbi-fit-image.its
@@ -91,7 +91,7 @@ payload_generator_tarball := $(srcdir)/br-dl-dir/payload_generator.zip
 # payloadgen_wrkdir := $(wrkdir)/payload_generator
 hss_payload_generator := $(wrkdir)/hss-payload-generator
 hss_srcdir := $(srcdir)/hart-software-services
-hss_uboot_payload_bin := $(wrkdir)/payload.bin
+hss_uboot_payload_bin ?= $(wrkdir)/payload.bin
 payload_config := $(confdir)/$(DEVKIT)/config.yaml
 
 amp_example := $(buildroot_initramfs_wrkdir)/images/mpfs-rpmsg-remote.elf
@@ -428,7 +428,7 @@ LINUX_END=193120
 ROOT_START=195168
 
 .PHONY: create-icicle-partitions
-create-icicle-partitions:
+create-icicle-partitions: $(fit) $(uboot_s_scr)
 	@test -b $(DISK) || (echo "$(DISK): is not a block device"; exit 1)
 	$(eval DEVICE_NAME := $(shell basename $(DISK)))
 	$(eval SD_SIZE := $(shell cat /sys/block/$(DEVICE_NAME)/size))
@@ -442,7 +442,7 @@ create-icicle-partitions:
 	@sleep 1
 
 .PHONY: update-icicle
-update-icicle: $(fit) $(uboot_s_scr)
+update-icicle: 
 	@test -b $(DISK) || (echo "$(DISK): is not a block device"; exit 1)
 
 ifeq ($(DISK)1,$(wildcard $(DISK)1))

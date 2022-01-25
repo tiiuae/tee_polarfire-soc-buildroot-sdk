@@ -96,7 +96,7 @@ For these examples the identifier `sdX` is used.
 
 Once sure of the drive identifier, use the following command to copy your Linux image to the board, replacing the X and `<devkit>` as appropriate:
 ```
-$ sudo make DISK=/dev/sdX DEVKIT=<devkit> format-icicle-image 
+$ make DISK=/dev/sdX DEVKIT=<devkit> format-icicle-image 
 ```
 
 When the transfer has completed, press `CTRL+C` in the HSS serial console to return to the HSS console.                 
@@ -106,7 +106,7 @@ If you are using the `icicle-kit-es-amp` machine, attach to UART3 to observe its
 
 Similarly, a root file system can be written to the eMMC using
 ```
-$ sudo make DISK=/dev/sdX DEVKIT=<DEVKIT> format-rootfs-image 
+$ make DISK=/dev/sdX DEVKIT=<DEVKIT> format-rootfs-image 
 ```
 
 ### Preparing an SD Card for the Icicle Kit
@@ -201,6 +201,17 @@ When Linux boots, log in with the username `root`. There is no password required
 Similarly, a root file system can be written to the SD card using
 ```
 $ sudo make DISK=/dev/sdX DEVKIT=<DEVKIT> format-rootfs-image 
+```
+
+#### Programming prebuilt images
+Prebuilt images can be programmed to eMMC or SD card which already have required partition setup.
+```
+$ make DEVKIT=icicle-kit-es-sel4 update-icicle DISK=/dev/sdX 
+```
+
+HSS payload and initramfs binary default locations can be overwritten with `hss_uboot_payload_bin` and `vfat_image` variables.
+```
+$ make DEVKIT=icicle-kit-es-sel4 update-icicle DISK=/dev/sdX hss_uboot_payload_bin=/path/to/file vfat_image=/path/to/file
 ```
 
 ## Supported Build Hosts
