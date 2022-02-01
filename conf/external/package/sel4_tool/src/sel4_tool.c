@@ -683,7 +683,7 @@ static int cmdline(int argc, char* argv[])
         printf("out_file: %s\n", out_file);
 
         ret = handle_key_creation_request(KEY_RSA,
-                                          3072,
+                                          2048,
                                           0xEEEEEEEE,
                                           "Kekkonen",
                                           &blob,
@@ -836,7 +836,7 @@ int main(int argc, char* argv[])
         }
         break;
         case 9:
-            ret =  handle_key_creation_request(KEY_RSA, 3072, 0x11111111, "Kekkonen", NULL, NULL);
+            ret =  handle_key_creation_request(KEY_RSA, 2048, 0x11111111, "Kekkonen", NULL, NULL);
         break;
         case 10:
         {
@@ -844,7 +844,7 @@ int main(int argc, char* argv[])
             uint8_t guid[32] = {0};
             uint32_t nbits;
             uint32_t key_data_len;
-            ret =  handle_key_creation_request(KEY_RSA, 3072, 0xEEEEEEEE, "Krypt_test", &key_data, &key_data_len);
+            ret =  handle_key_creation_request(KEY_RSA, 2048, 0xEEEEEEEE, "Krypt_test", &key_data, &key_data_len);
             printf("Key blob size = %d\n", key_data_len);
             if (!ret)
             {
