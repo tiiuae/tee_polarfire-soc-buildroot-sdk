@@ -556,6 +556,9 @@ static int handle_key_creation_request(uint32_t format, uint32_t nbits, uint32_t
     }
     else
     {
+        printf("Key data GUID:\n");
+        hexdump(&ret_cmd->key_data_info.guid, 32);
+
         printf("PubKey\n");
         hexdump(public_key, ret_cmd->key_data_info.pubkey_length);
 
@@ -638,6 +641,9 @@ static int handle_publick_key_extraction_request(uint8_t *key_blob, uint32_t blo
         uint8_t *public_key = &ret_cmd->pubkey[0];
         printf("PubKey\n");
         hexdump(public_key, ret_cmd->key_info.pubkey_length);
+
+        printf("Key data GUID:\n");
+        hexdump(&ret_cmd->key_info.guid, 32);
     }
 
     ret = 0;
@@ -690,7 +696,7 @@ static int cmdline(int argc, char* argv[])
                                           &blob_size);
         if (ret)
             goto out;
-        
+
         printf("Storage blob\n");
         hexdump(blob, blob_size);
 
