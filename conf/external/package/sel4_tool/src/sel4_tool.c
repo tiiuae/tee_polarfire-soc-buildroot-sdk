@@ -536,11 +536,11 @@ static int handle_key_creation_request(uint32_t format, uint32_t nbits, uint32_t
 
     ret_cmd = (struct ree_tee_key_resp_cmd*)tty.recv_buf;
 
-    printf("Pub Key length = %d, priv key length = %d\n", ret_cmd->key_data_info.pubkey_length, ret_cmd->key_data_info.privkey_length);
+    printf("Pub Key length = %d, priv key length = %d\n", ret_cmd->key_blob.key_data_info.pubkey_length, ret_cmd->key_blob.key_data_info.privkey_length);
 
     if (output)
     {
-        size_t output_size = ret_cmd->key_data_info.storage_size + sizeof(struct ree_tee_key_info);
+        size_t output_size = ret_cmd->key_blob.key_data_info.storage_size + sizeof(struct ree_tee_key_info);
         printf("Storage blob size = %lu\n", output_size);
         *output = malloc(output_size);
         if (!*output)
@@ -550,24 +550,24 @@ static int handle_key_creation_request(uint32_t format, uint32_t nbits, uint32_t
             goto out;
         }
         struct key_data_blob *output_blob = (struct key_data_blob*)*output;
-        memcpy(&output_blob->key_data_info, &ret_cmd->key_data_info, sizeof(struct ree_tee_key_info));
-        memcpy(&output_blob->key_data, &ret_cmd->key_data, ret_cmd->key_data_info.storage_size);
+        memcpy(&output_blob->key_data_info, &ret_cmd->key_blob.key_data_info, sizeof(struct ree_tee_key_info));
+        memcpy(&output_blob->key_data, &ret_cmd->key_blob.key_data, ret_cmd->key_blob.key_data_info.storage_size);
         *output_len = output_size;
     }
     else
     {
         printf("Key data GUID:\n");
-        hexdump(&ret_cmd->key_data_info.guid, 32);
+        hexdump(&ret_cmd->key_blob.key_data_info.guid, 32);
 
-        if (ret_cmd->key_data_info.format == KEY_RSA)
+        if (ret_cmd->key_blob.key_data_info.format == KEY_RSA_PLAINTEXT)
         {
-            uint8_t *public_key = &ret_cmd->key_data.keys[0];
-            uint8_t *private_key = &ret_cmd->key_data.keys[ret_cmd->key_data_info.pubkey_length];
+            uint8_t *public_key = &ret_cmd->key_blob.key_data.keys[0];
+            uint8_t *private_key = &ret_cmd->key_blob.key_data.keys[ret_cmd->key_blob.key_data_info.pubkey_length];
             printf("PubKey\n");
-            hexdump(public_key, ret_cmd->key_data_info.pubkey_length);
+            hexdump(public_key, ret_cmd->key_blob.key_data_info.pubkey_length);
 
             printf("PrivateKey\n");
-            hexdump(private_key, ret_cmd->key_data_info.privkey_length);
+            hexdump(private_key, ret_cmd->key_blob.key_data_info.privkey_length);
         }
         else
         {
@@ -585,7 +585,7 @@ out:
     return ret;
 }
 
-static int handle_publick_key_extraction_request(uint8_t *key_blob, uint32_t blob_size, uint32_t clientid, uint8_t *guid, uint32_t *nbits,  uint8_t **output, uint32_t *pubkey_len)
+static int handle_publick_key_extraction_request(struct key_data_blob *input_blob, uint32_t blob_size, uint32_t *nbits, uint8_t **output, uint32_t *pubkey_len)
 {
     ssize_t ret;
 
@@ -594,7 +594,7 @@ static int handle_publick_key_extraction_request(uint8_t *key_blob, uint32_t blo
     struct ree_tee_pub_key_resp_cmd *ret_cmd = NULL;
     struct ree_tee_pub_key_req_cmd *cmd = NULL;
 
-    uint32_t cmd_len = sizeof(struct ree_tee_pub_key_req_cmd) + blob_size;
+    uint32_t cmd_len = sizeof(struct ree_tee_hdr) + blob_size;
 
     printf("cmd_len: %d\n", cmd_len);
 
@@ -609,11 +609,10 @@ static int handle_publick_key_extraction_request(uint8_t *key_blob, uint32_t blo
 
     cmd->hdr.msg_type = REE_TEE_EXT_PUBKEY_REQ;
     cmd->hdr.length = cmd_len;
-    cmd->client_id = clientid;
+    
 
-    memcpy(&cmd->crypted_key_data[0], key_blob, blob_size);
-    memcpy(cmd->guid, guid, sizeof(cmd->guid));
-
+    memcpy(&cmd->data_in, input_blob, blob_size);
+ 
     tty.send_buf = (void*)cmd;
     tty.send_len = cmd->hdr.length;
     tty.recv_buf = NULL;
@@ -695,7 +694,7 @@ static int cmdline(int argc, char* argv[])
 
         printf("out_file: %s\n", out_file);
 
-        ret = handle_key_creation_request(KEY_RSA,
+        ret = handle_key_creation_request(KEY_RSA_CIPHERED,
                                           2048,
                                           0xEEEEEEEE,
                                           "Kekkonen",
@@ -734,10 +733,8 @@ static int cmdline(int argc, char* argv[])
             goto out;
 
         struct key_data_blob *input = (struct key_data_blob*)blob;
-        ret = handle_publick_key_extraction_request((void*)&input->key_data,
-                                                    input->key_data_info.storage_size,
-                                                    0xEEEEEEEE,
-                                                    input->key_data_info.guid,
+        ret = handle_publick_key_extraction_request(input,
+                                                    blob_size,
                                                     &nbits,
                                                     &pubkey_bin,
                                                     &pubkey_len);
@@ -850,19 +847,19 @@ int main(int argc, char* argv[])
         }
         break;
         case 9:
-            ret =  handle_key_creation_request(KEY_RSA, 2048, 0x11111111, "Kekkonen", NULL, NULL);
+            ret =  handle_key_creation_request(KEY_RSA_CIPHERED, 2048, 0x11111111, "Kekkonen", NULL, NULL);
         break;
         case 10:
         {
             uint8_t *key_data = NULL;
             uint32_t nbits;
             uint32_t key_data_len;
-            ret =  handle_key_creation_request(KEY_RSA, 2048, 0xEEEEEEEE, "Krypt_test", &key_data, &key_data_len);
+            ret =  handle_key_creation_request(KEY_RSA_CIPHERED, 2048, 0xEEEEEEEE, "Krypt_test", &key_data, &key_data_len);
             printf("Key blob size = %d\n", key_data_len);
             if (!ret)
             {
                 struct key_data_blob *input = (struct key_data_blob*)key_data;
-                handle_publick_key_extraction_request((void*)&input->key_data, input->key_data_info.storage_size, 0xEEEEEEEE, input->key_data_info.guid, &nbits, NULL, NULL);
+                handle_publick_key_extraction_request(input, key_data_len, &nbits, NULL, NULL);
             }
             if (key_data)
                 free(key_data);
