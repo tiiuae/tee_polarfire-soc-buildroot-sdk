@@ -15,6 +15,7 @@
 #include "ree_tee_msg.h"
 #include "sel4_tty_rpmsg.h"
 #include "sel4_tool_cmdline.h"
+#include "sel4_req.h"
 
 #define SECURE 0
 #define PLAIN  1
@@ -747,23 +748,20 @@ static int cmdline(int argc, char* argv[])
         ret = sel4_tool_save_file(out_file, pubkey_bin, pubkey_len);
         goto out;
 
+        break;
+    case TOOL_CMD_READ_CRASHLOG:
+        ret = sel4_read_crashlog(out_file);
+        break;
     default:
-        /* No cmd */
+        printf("ERROR: unknown cmd: %d\n", tool_cmd);
         break;
     }
 
 out:
-    if (in_file)
-        free(in_file);
-
-    if (out_file)
-        free(out_file);
-
-    if (blob)
-        free(blob);
-
-    if (pubkey_bin)
-        free(pubkey_bin);
+    free(in_file);
+    free(out_file);
+    free(blob);
+    free(pubkey_bin);
 
     return ret;
 }

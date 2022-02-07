@@ -16,7 +16,7 @@
 
 #include "sel4_tool_cmdline.h"
 
-int sel4_tool_load_file(char *storage_path, uint8_t **storage, uint32_t *storage_len)
+int sel4_tool_load_file(const char *storage_path, uint8_t **storage, uint32_t *storage_len)
 {
     int fd = 0;
     int err = -1;
@@ -72,7 +72,7 @@ out:
     return err;
 }
 
-int sel4_tool_save_file(char *storage_path, uint8_t *storage, uint32_t storage_len)
+int sel4_tool_save_file(const char *storage_path, uint8_t *storage, uint32_t storage_len)
 {
     int fd = 0;
     int err = -1;
