@@ -521,10 +521,10 @@ static int handle_publick_key_extraction_request(struct key_data_blob *input_blo
 
     cmd->hdr.msg_type = REE_TEE_EXT_PUBKEY_REQ;
     cmd->hdr.length = cmd_len;
-    
+
 
     memcpy(&cmd->data_in, input_blob, blob_size);
- 
+
     tty.send_buf = (void*)cmd;
     tty.send_len = cmd->hdr.length;
     tty.recv_buf = NULL;
@@ -574,6 +574,7 @@ out:
 
     return ret;
 }
+
 
 static int cmdline(int argc, char* argv[])
 {
@@ -685,6 +686,32 @@ static int cmdline(int argc, char* argv[])
     case TOOL_CMD_READ_CRASHLOG:
         ret = sel4_read_crashlog(out_file);
         break;
+    case TOOL_CMD_IMPORT_KEY:
+    {
+        printf("TOOL_CMD_IMPORT_KEY\n");
+        if (!in_file)
+        {
+            printf("ERROR no in file defined\n");
+            ret = -EINVAL;
+            goto out;
+        }
+        printf("in_file: %s\n", in_file);
+
+        ret = sel4_tool_load_file(in_file, (uint8_t **)&blob, &blob_size);
+        if (ret)
+            goto out;
+
+        struct key_data_blob *input = (struct key_data_blob*)blob;
+
+        printf("Import Keys \n");
+        ret = sel4_req_key_import(input, blob_size);
+
+        if (ret)
+            printf("Key file imported to tee-os\n");
+        else
+            printf("Key file import failed %d\n", ret);
+    }
+
     default:
         printf("ERROR: unknown cmd: %d\n", tool_cmd);
         break;

@@ -173,3 +173,58 @@ out:
     return ret;
 }
 
+int sel4_req_key_import(struct key_data_blob *input_blob, uint32_t blob_size)
+{
+    ssize_t ret;
+
+    struct tty_msg tty = {0};
+
+    struct ree_tee_status_resp *ret_cmd = NULL;
+    struct ree_tee_key_import_cmd *cmd = NULL;
+
+    uint32_t cmd_len = sizeof(struct ree_tee_hdr) + blob_size;
+
+    printf("cmd_len: %d\n", cmd_len);
+
+    cmd = malloc(cmd_len);
+    if (!cmd)
+    {
+        printf("ERROR: out of memory: %d\n", __LINE__);
+        ret = -ENOMEM;
+        goto out;
+    }
+    memset(cmd, 0x0, cmd_len);
+
+    cmd->hdr.msg_type = REE_TEE_KEY_IMPORT_REQ;
+    cmd->hdr.length = cmd_len;
+
+
+    memcpy(&cmd->data_in, input_blob, blob_size);
+
+    tty.send_buf = (void*)cmd;
+    tty.send_len = cmd->hdr.length;
+    tty.recv_buf = NULL;
+    tty.recv_len = HDR_LEN;
+    tty.recv_msg = REE_TEE_KEY_IMPORT_RESP;
+
+    ret = tty_req(&tty);
+    if (ret < 0)
+        goto out;
+
+    if (ret < sizeof(struct ree_tee_status_resp))
+    {
+        printf("Invalid msg size: %ld\n", ret);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    ret_cmd = (struct ree_tee_status_resp*)tty.recv_buf;
+
+    ret = ret_cmd->hdr.status;
+
+out:
+    if (cmd)
+        free(cmd);
+
+    return ret;
+}
