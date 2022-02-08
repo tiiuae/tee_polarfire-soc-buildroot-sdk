@@ -8,7 +8,9 @@
 #define _SEL4_REQ_H_
 
 #include <stdint.h>
+#include "ree_tee_msg.h"
 
+int sel4_req_key_creation(uint32_t format, uint32_t nbits, uint32_t clientid, const char *name, struct key_data_blob **output, uint32_t *output_len);
 int sel4_read_crashlog(const char *filename);
 
 #endif /* _SEL4_REQ_H_ */

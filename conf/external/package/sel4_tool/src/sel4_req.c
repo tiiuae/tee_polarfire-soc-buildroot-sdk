@@ -16,6 +16,7 @@
 #include "sel4_req.h"
 #include "sel4_circ.h"
 #include "ree_tee_msg.h"
+#include "sel4_tty_rpmsg.h"
 
 
 #define DEVMEM_HANDLE           "/dev/mem"  /* For reading crashmem */
@@ -30,6 +31,78 @@ struct crashlog_hdr {
     sync_spinlock_t writer_lock;
     sync_spinlock_t reader_lock;
 };
+
+int sel4_req_key_creation(uint32_t format, uint32_t nbits, uint32_t clientid,
+                          const char *name, struct key_data_blob **output,
+                          uint32_t *output_len)
+{
+    int ret = -1;
+
+    struct ree_tee_key_resp_cmd *ret_cmd = NULL;
+
+    struct ree_tee_key_req_cmd cmd = {
+        .hdr.msg_type = REE_TEE_GEN_KEY_REQ,
+        .hdr.length = sizeof(struct ree_tee_key_req_cmd),
+        .key_req_info.format = format,
+        .key_req_info.key_nbits = nbits,
+        .key_req_info.client_id = clientid,
+    };
+
+    struct tty_msg tty = {
+        .send_buf = (void *)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = SKIP_LEN_CHECK,
+        .recv_msg = REE_TEE_GEN_KEY_RESP,
+    };
+
+    if (!name || !output || !output_len) {
+        printf("ERROR params: %s: %d\n", __FUNCTION__, __LINE__);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    strcpy(cmd.key_req_info.name, name);
+
+    ret = tty_req(&tty);
+    if (ret < 0)
+        goto out;
+
+    if (ret < sizeof(struct ree_tee_key_resp_cmd)) {
+        printf("Invalid msg size: %d\n", ret);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    ret_cmd = (struct ree_tee_key_resp_cmd *)tty.recv_buf;
+
+    printf("Pub Key length = %d, priv key length = %d\n",
+           ret_cmd->key_blob.key_data_info.pubkey_length,
+           ret_cmd->key_blob.key_data_info.privkey_length);
+
+    size_t output_size = ret_cmd->key_blob.key_data_info.storage_size +
+                         sizeof(struct ree_tee_key_info);
+
+    printf("Storage blob size = %lu\n", output_size);
+
+    *output = malloc(output_size);
+    if (!*output) {
+        printf("Out of memory: %s: %d\n", __FUNCTION__, __LINE__);
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    memcpy(&(*output)->key_data_info, &ret_cmd->key_blob, output_size);
+
+    *output_len = output_size;
+
+    ret = 0;
+out:
+
+    free(tty.recv_buf);
+
+    return ret;
+}
 
 int sel4_read_crashlog(const char *filename)
 {

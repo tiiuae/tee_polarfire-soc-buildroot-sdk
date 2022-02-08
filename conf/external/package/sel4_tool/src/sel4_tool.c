@@ -92,8 +92,6 @@ static void print_menu(void)
     printf("6 - seL4 status\n");
     printf("7 - Unknown msg type\n");
     printf("8 - Sign Service\n");
-    printf("9 - Generate keys\n");
-    printf("10 - Generate key and extract public key\n");
     printf("\n");
 }
 
@@ -499,93 +497,6 @@ out:
     return ret;
 }
 
-
-static int handle_key_creation_request(uint32_t format, uint32_t nbits, uint32_t clientid, const char *name, uint8_t **output, uint32_t *output_len)
-{
-    int ret = -1;
-
-    struct ree_tee_key_resp_cmd *ret_cmd;
-
-    struct ree_tee_key_req_cmd cmd ={
-        .hdr.msg_type = REE_TEE_GEN_KEY_REQ,
-        .hdr.length = sizeof(struct ree_tee_key_req_cmd ),
-        .key_req_info.format = format,
-        .key_req_info.key_nbits = nbits,
-        .key_req_info.client_id = clientid,
-    };
-
-    struct tty_msg tty = {
-        .send_buf = (void*)&cmd,
-        .send_len = cmd.hdr.length,
-        .recv_buf = NULL,
-        .recv_len = SKIP_LEN_CHECK,
-        .recv_msg = REE_TEE_GEN_KEY_RESP,
-    };
-
-    strcpy(cmd.key_req_info.name, name);
-
-    ret = tty_req(&tty);
-    if (ret < 0)
-        goto out;
-
-    if (ret < sizeof(struct ree_tee_key_resp_cmd))
-    {
-        printf("Invalid msg size: %d\n", ret);
-        ret = -EINVAL;
-        goto out;
-    }
-
-    ret_cmd = (struct ree_tee_key_resp_cmd*)tty.recv_buf;
-
-    printf("Pub Key length = %d, priv key length = %d\n", ret_cmd->key_blob.key_data_info.pubkey_length, ret_cmd->key_blob.key_data_info.privkey_length);
-
-    if (output)
-    {
-        size_t output_size = ret_cmd->key_blob.key_data_info.storage_size + sizeof(struct ree_tee_key_info);
-        printf("Storage blob size = %lu\n", output_size);
-        *output = malloc(output_size);
-        if (!*output)
-        {
-            printf("Out of memory: %s: %d\n", __FUNCTION__, __LINE__);
-            ret = -ENOMEM;
-            goto out;
-        }
-        struct key_data_blob *output_blob = (struct key_data_blob*)*output;
-        memcpy(&output_blob->key_data_info, &ret_cmd->key_blob.key_data_info, sizeof(struct ree_tee_key_info));
-        memcpy(&output_blob->key_data, &ret_cmd->key_blob.key_data, ret_cmd->key_blob.key_data_info.storage_size);
-        *output_len = output_size;
-    }
-    else
-    {
-        printf("Key data GUID:\n");
-        hexdump(&ret_cmd->key_blob.key_data_info.guid, 32);
-
-        if (ret_cmd->key_blob.key_data_info.format == KEY_RSA_PLAINTEXT)
-        {
-            uint8_t *public_key = &ret_cmd->key_blob.key_data.keys[0];
-            uint8_t *private_key = &ret_cmd->key_blob.key_data.keys[ret_cmd->key_blob.key_data_info.pubkey_length];
-            printf("PubKey\n");
-            hexdump(public_key, ret_cmd->key_blob.key_data_info.pubkey_length);
-
-            printf("PrivateKey\n");
-            hexdump(private_key, ret_cmd->key_blob.key_data_info.privkey_length);
-        }
-        else
-        {
-            printf("Key data ciphered\n");
-        }
-    }
-
-    ret = 0;
-out:
-
-    if (tty.recv_buf) {
-        free(tty.recv_buf);
-    }
-
-    return ret;
-}
-
 static int handle_publick_key_extraction_request(struct key_data_blob *input_blob, uint32_t blob_size, uint32_t *nbits, uint8_t **output, uint32_t *pubkey_len)
 {
     ssize_t ret;
@@ -672,7 +583,8 @@ static int cmdline(int argc, char* argv[])
     char *out_file = NULL;
     uint32_t tool_cmd = TOOL_CMD_INVALID;
 
-    uint8_t *blob = NULL;
+    uint32_t format = 0;
+    struct key_data_blob *blob = NULL;
     uint32_t blob_size = 0;
     uint8_t *pubkey_bin = NULL;
     uint32_t pubkey_len = 0;
@@ -684,8 +596,14 @@ static int cmdline(int argc, char* argv[])
 
     switch (tool_cmd)
     {
-    case TOOL_CMD_GENERATE_KEYS:
-        printf("TOOL_CMD_GENERATE_KEYS\n");
+    case TOOL_CMD_GENERATE_RSA_CIPHERED:
+        format = KEY_RSA_CIPHERED;
+        /* fallthrough */
+    case TOOL_CMD_GENERATE_RSA_PLAINTEXT:
+        if (format != KEY_RSA_CIPHERED)
+            format = KEY_RSA_PLAINTEXT;
+
+        printf("TOOL_CMD_GENERATE_KEYS, format: %d\n", format);
         if (!out_file)
         {
             printf("ERROR no out file defined\n");
@@ -695,19 +613,34 @@ static int cmdline(int argc, char* argv[])
 
         printf("out_file: %s\n", out_file);
 
-        ret = handle_key_creation_request(KEY_RSA_CIPHERED,
-                                          2048,
-                                          0xEEEEEEEE,
-                                          "Kekkonen",
-                                          &blob,
-                                          &blob_size);
+        ret = sel4_req_key_creation(format,
+                                    2048,
+                                    0xEEEEEEEE,
+                                    "Kekkonen",
+                                    &blob,
+                                    &blob_size);
         if (ret)
             goto out;
 
-        printf("Storage blob\n");
-        hexdump(blob, blob_size);
+        printf("Key data GUID:\n");
+        hexdump(blob->key_data_info.guid, 32);
 
-        ret = sel4_tool_save_file(out_file, blob, blob_size);
+        if (blob->key_data_info.format == KEY_RSA_PLAINTEXT)
+        {
+            printf("PubKey\n");
+            hexdump(&blob->key_data.keys[0], blob->key_data_info.pubkey_length);
+
+            printf("PrivateKey\n");
+            hexdump(&blob->key_data.keys[blob->key_data_info.pubkey_length], blob->key_data_info.privkey_length);
+        }
+        else
+        {
+            printf("Key data ciphered\n");
+            printf("Storage blob\n");
+            hexdump(blob, blob_size);
+        }
+
+        ret = sel4_tool_save_file(out_file, (uint8_t *)blob, blob_size);
         goto out;
 
     case TOOL_CMD_EXPORT_KEY:
@@ -729,7 +662,7 @@ static int cmdline(int argc, char* argv[])
         printf("in_file: %s\n", in_file);
         printf("out_file: %s\n", out_file);
 
-        ret = sel4_tool_load_file(in_file, &blob, &blob_size);
+        ret = sel4_tool_load_file(in_file, (uint8_t **)&blob, &blob_size);
         if (ret)
             goto out;
 
@@ -842,25 +775,6 @@ int main(int argc, char* argv[])
                 handle_sign_request(RAW_FORMAT, tmp_hash, NULL);
             else
                 handle_sign_request(DER_FORMAT, tmp_hash, NULL);
-        }
-        break;
-        case 9:
-            ret =  handle_key_creation_request(KEY_RSA_CIPHERED, 2048, 0x11111111, "Kekkonen", NULL, NULL);
-        break;
-        case 10:
-        {
-            uint8_t *key_data = NULL;
-            uint32_t nbits;
-            uint32_t key_data_len;
-            ret =  handle_key_creation_request(KEY_RSA_CIPHERED, 2048, 0xEEEEEEEE, "Krypt_test", &key_data, &key_data_len);
-            printf("Key blob size = %d\n", key_data_len);
-            if (!ret)
-            {
-                struct key_data_blob *input = (struct key_data_blob*)key_data;
-                handle_publick_key_extraction_request(input, key_data_len, &nbits, NULL, NULL);
-            }
-            if (key_data)
-                free(key_data);
         }
         break;
         default:
