@@ -109,12 +109,25 @@ out:
     return err;
 }
 
-static void print_usage()
+static void print_usage(const char *prog_name)
 {
     printf("Usage:\n");
     printf("    -i storage_path        Path to load storage blob\n");
     printf("    -o storage_path        Path to store storage blob\n");
     printf("    -c tool_cmd            Run sel4-tool cmd\n");
+    printf("        %d: TOOL_CMD_GENERATE_RSA_PLAINTEXT\n", TOOL_CMD_GENERATE_RSA_PLAINTEXT);
+    printf("        %d: TOOL_CMD_GENERATE_RSA_CIPHERED\n", TOOL_CMD_GENERATE_RSA_CIPHERED);
+    printf("        %d: TOOL_CMD_EXPORT_KEY\n", TOOL_CMD_EXPORT_KEY);
+    printf("        %d: TOOL_CMD_READ_CRASHLOG\n", TOOL_CMD_READ_CRASHLOG);
+    printf("\n");
+    printf("\nTOOL_CMD_GENERATE_RSA_PLAINTEXT:\n");
+    printf("    %s -o blob_file -c %d\n", prog_name, TOOL_CMD_GENERATE_RSA_PLAINTEXT);
+    printf("\nTOOL_CMD_GENERATE_RSA_CIPHERED:\n");
+    printf("    %s -o blob_file -c %d\n", prog_name, TOOL_CMD_GENERATE_RSA_CIPHERED);
+    printf("\nTOOL_CMD_EXPORT_KEY:\n");
+    printf("    %s -i blob_file -o export_file -c %d\n", prog_name, TOOL_CMD_EXPORT_KEY);
+    printf("\nTOOL_CMD_READ_CRASHLOG:\n");
+    printf("    %s -o crashlog_file -c %d\n", prog_name, TOOL_CMD_READ_CRASHLOG);
 }
 
 int sel4_tool_parse_opts(int argc, char* argv[], char **infile, char **outfile, uint32_t *cmd)
@@ -153,7 +166,7 @@ int sel4_tool_parse_opts(int argc, char* argv[], char **infile, char **outfile, 
             break;
 
         default:
-            print_usage();
+            print_usage(argv[0]);
             return -EPERM;
         }
     }
