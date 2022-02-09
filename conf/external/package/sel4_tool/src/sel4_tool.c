@@ -142,6 +142,48 @@ out:
     return ret;
 }
 
+static int handle_invalid_msg_len(int32_t send_len, uint32_t recv_len, uint32_t recv_status)
+{
+    ssize_t ret;
+
+    struct ree_tee_status_req cmd = {
+        .hdr.msg_type = REE_TEE_STATUS_REQ,
+        .hdr.length = send_len,
+    };
+
+    struct tty_msg tty = {
+        .send_buf = (void*)&cmd,
+        .send_len = cmd.hdr.length,
+        .recv_buf = NULL,
+        .recv_len = recv_len,
+        .recv_msg = REE_TEE_STATUS_RESP,
+        .status_check = SKIP_TEE_OK_CHECK,
+    };
+
+    struct ree_tee_status_resp *resp = NULL;
+
+    ret = tty_req(&tty);
+    if (ret < 0)
+    {
+        printf("Message failed: %ld \n", ret);
+        goto out;
+    }
+
+    resp = (struct ree_tee_status_resp*)tty.recv_buf;
+
+    if (resp->hdr.status != recv_status)
+    {
+        printf("ERROR invalid error code: %d\n", resp->hdr.status);
+        ret = -EFAULT;
+        goto out;
+    }
+
+    printf("msg type: %d, status: %d\n", resp->hdr.msg_type, resp->hdr.status);
+
+    ret = 0;
+out:
+    free(tty.recv_buf);
+
     return ret;
 }
 
@@ -731,6 +773,51 @@ static int cmdline(int argc, char* argv[])
         else
             printf("Key file import failed %d\n", ret);
     }
+    break;
+    case TOOL_CMD_TEST_STATUS:
+        printf("TOOL_CMD_TEST_STATUS\n");
+        ret = handle_status_request();
+        break;
+    case TOOL_CMD_TEST_UNKNOWN_CMD:
+        printf("TOOL_CMD_TEST_UNKNOWN_CMD\n");
+        ret = handle_unknown_request();
+        break;
+    case TOOL_CMD_TEST_INV_SEND_LEN:
+        printf("TOOL_CMD_TEST_INV_SEND_LEN\n");
+        ret = handle_invalid_msg_len(HDR_LEN - 3, HDR_LEN, TEE_INVALID_MSG_SIZE);
+        break;
+    case TOOL_CMD_TEST_INV_RECV_LEN:
+        printf("TOOL_CMD_TEST_INV_RECV_LEN\n");
+        ret = handle_invalid_msg_len(HDR_LEN, HDR_LEN - 3, TEE_OK);
+        break;
+    case TOOL_CMD_TEST_CHANGE_CLID:
+        /* update keyinfo client id which is different than inside the blob */
+        printf("TOOL_CMD_TEST_CHANGE_CLID\n");
+
+        if (!in_file)
+        {
+            printf("ERROR no in file defined\n");
+            ret = -EINVAL;
+            goto out;
+        }
+
+        if (!out_file)
+        {
+            printf("ERROR no out file defined\n");
+            ret = -EINVAL;
+            goto out;
+        }
+
+        ret = sel4_tool_load_file(in_file, (uint8_t **)&blob, &blob_size);
+        if (ret)
+            goto out;
+
+        printf("blob->key_data_info.client_id %d -> ", blob->key_data_info.client_id);
+        blob->key_data_info.client_id += 5;
+        printf("%d\n", blob->key_data_info.client_id);
+
+        ret = sel4_tool_save_file(out_file, (uint8_t *)blob, blob_size);
+        break;
 
     default:
         printf("ERROR: unknown cmd: %d\n", tool_cmd);
