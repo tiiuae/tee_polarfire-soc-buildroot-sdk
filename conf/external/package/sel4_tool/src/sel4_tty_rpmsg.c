@@ -149,6 +149,14 @@ int tty_req(struct tty_msg *tty)
 
     hdr = (struct ree_tee_hdr *)tty->recv_buf;
 
+    if (tty->status_check == VERIFY_TEE_OK &&
+        hdr->status != TEE_OK)
+    {
+        printf("ERROR: header status: %d\n", hdr->status);
+        err = -EFAULT;
+        goto err_out;
+    }
+
     if (tty->recv_len != SKIP_LEN_CHECK &&
         tty->recv_len != recv)
     {

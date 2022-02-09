@@ -109,7 +109,7 @@ static int handle_unknown_request()
         .send_len = cmd.hdr.length,
         .recv_buf = NULL,
         .recv_len = HDR_LEN,
-        .recv_msg = REE_TEE_INVALID,
+        .status_check = SKIP_TEE_OK_CHECK,
     };
 
     struct ree_tee_status_req *resp = NULL;
@@ -149,6 +149,7 @@ static int handle_status_request()
         .recv_buf = NULL,
         .recv_len = HDR_LEN,
         .recv_msg = REE_TEE_STATUS_RESP,
+        .status_check = VERIFY_TEE_OK,
     };
 
     struct ree_tee_status_req *resp = NULL;
@@ -188,6 +189,7 @@ static int handle_snvm_write(uint8_t *input_data, uint8_t *key, int page, int mo
         .recv_buf = NULL,
         .recv_len = HDR_LEN,
         .recv_msg = REE_TEE_SNVM_WRITE_RESP,
+        .status_check = VERIFY_TEE_OK,
     };
 
     struct ree_tee_snvm_cmd *resp = NULL;
@@ -249,6 +251,7 @@ static int handle_snvm_read(int page, uint8_t *key, uint8_t *output, int mode)
         .recv_buf = NULL,
         .recv_len = sizeof(cmd),
         .recv_msg = REE_TEE_SNVM_READ_RESP,
+        .status_check = VERIFY_TEE_OK,
     };
 
     struct ree_tee_snvm_cmd *resp = NULL;
@@ -314,6 +317,7 @@ static int handle_puf_request(uint8_t opcode, uint8_t *challenge, uint8_t *outpu
         .recv_buf = NULL,
         .recv_len = sizeof(cmd),
         .recv_msg = REE_TEE_PUF_RESP,
+        .status_check = VERIFY_TEE_OK,
     };
 
     struct ree_tee_puf_cmd *resp = NULL;
@@ -364,6 +368,7 @@ static int handle_sign_request(uint8_t format, uint8_t *hash, uint8_t *output)
         .recv_buf = NULL,
         .recv_len = sizeof(cmd),
         .recv_msg = REE_TEE_SIGN_RESP,
+        .status_check = VERIFY_TEE_OK,
     };
 
     struct ree_tee_sign_cmd *resp = NULL;
@@ -412,6 +417,7 @@ static int handle_deviceid_request(uint8_t *output)
         .recv_buf = NULL,
         .recv_len = sizeof(cmd),
         .recv_msg = REE_TEE_DEVICEID_RESP,
+        .status_check = VERIFY_TEE_OK,
     };
 
     struct ree_tee_deviceid_cmd *resp = NULL;
@@ -462,6 +468,7 @@ static int handle_rng_request(uint8_t *output)
         .recv_buf = NULL,
         .recv_len = sizeof(cmd),
         .recv_msg = REE_TEE_RNG_RESP,
+        .status_check = VERIFY_TEE_OK,
     };
 
     struct ree_tee_rng_cmd *resp = NULL;
@@ -530,6 +537,7 @@ static int handle_publick_key_extraction_request(struct key_data_blob *input_blo
     tty.recv_buf = NULL;
     tty.recv_len = SKIP_LEN_CHECK;
     tty.recv_msg = REE_TEE_EXT_PUBKEY_RESP;
+    tty.status_check = VERIFY_TEE_OK;
 
     ret = tty_req(&tty);
     if (ret < 0)

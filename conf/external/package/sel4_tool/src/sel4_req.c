@@ -54,6 +54,7 @@ int sel4_req_key_creation(uint32_t format, uint32_t nbits, uint32_t clientid,
         .recv_buf = NULL,
         .recv_len = SKIP_LEN_CHECK,
         .recv_msg = REE_TEE_GEN_KEY_RESP,
+        .status_check = VERIFY_TEE_OK,
     };
 
     if (!name || !output || !output_len) {
@@ -206,6 +207,7 @@ int sel4_req_key_import(struct key_data_blob *input_blob, uint32_t blob_size)
     tty.recv_buf = NULL;
     tty.recv_len = HDR_LEN;
     tty.recv_msg = REE_TEE_KEY_IMPORT_RESP;
+    tty.status_check = VERIFY_TEE_OK;
 
     ret = tty_req(&tty);
     if (ret < 0)
