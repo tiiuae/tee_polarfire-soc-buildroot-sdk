@@ -176,11 +176,12 @@ int tty_req(struct tty_msg *tty)
     return recv;
 
 err_out:
-    if (tty->recv_buf)
-    {
-        free(tty->recv_buf);
-        tty->recv_buf = NULL;
+    if (hdr) {
+        printf("recv hdr: type: %d, status: %d, len: %d\n", hdr->msg_type, hdr->status, hdr->length);
     }
+
+    free(tty->recv_buf);
+    tty->recv_buf = NULL;
 
     return err;
 }

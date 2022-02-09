@@ -99,8 +99,10 @@ static int handle_unknown_request()
 {
     ssize_t ret;
 
+    int32_t invalid_type = REE_TEE_INVALID - 2;
+
     struct ree_tee_status_req cmd = {
-        .hdr.msg_type = REE_TEE_INVALID,
+        .hdr.msg_type = invalid_type,
         .hdr.length = HDR_LEN,
     };
 
@@ -109,10 +111,11 @@ static int handle_unknown_request()
         .send_len = cmd.hdr.length,
         .recv_buf = NULL,
         .recv_len = HDR_LEN,
+        .recv_msg = invalid_type, /* expect to get invalid msg type also in response */
         .status_check = SKIP_TEE_OK_CHECK,
     };
 
-    struct ree_tee_status_req *resp = NULL;
+    struct ree_tee_status_resp *resp = NULL;
 
     ret = tty_req(&tty);
     if (ret < 0)
@@ -121,15 +124,23 @@ static int handle_unknown_request()
         goto out;
     }
 
-    resp = (struct ree_tee_status_req*)tty.recv_buf;
+    resp = (struct ree_tee_status_resp*)tty.recv_buf;
 
-    printf("msg status: %d\n", resp->hdr.status);
+    if (resp->hdr.status != TEE_UNKNOWN_MSG)
+    {
+        printf("ERROR invalid error code: %d\n", resp->hdr.status);
+        ret = -EFAULT;
+        goto out;
+    }
+
+    printf("msg type: %d, status: %d\n", resp->hdr.msg_type, resp->hdr.status);
 
     ret = 0;
 out:
-    if (tty.recv_buf) {
-        free(tty.recv_buf);
-    }
+    free(tty.recv_buf);
+
+    return ret;
+}
 
     return ret;
 }
@@ -152,7 +163,7 @@ static int handle_status_request()
         .status_check = VERIFY_TEE_OK,
     };
 
-    struct ree_tee_status_req *resp = NULL;
+    struct ree_tee_status_resp *resp = NULL;
 
     ret = tty_req(&tty);
     if (ret < 0)
@@ -161,16 +172,14 @@ static int handle_status_request()
         goto out;
     }
 
-    resp = (struct ree_tee_status_req*)tty.recv_buf;
+    resp = (struct ree_tee_status_resp*)tty.recv_buf;
 
     printf("msg status: %d\n", resp->hdr.status);
 
     ret = 0;
 
 out:
-    if (tty.recv_buf) {
-        free(tty.recv_buf);
-    }
+    free(tty.recv_buf);
 
     return ret;
 }
@@ -543,14 +552,17 @@ static int handle_publick_key_extraction_request(struct key_data_blob *input_blo
     if (ret < 0)
         goto out;
 
+    ret_cmd = (struct ree_tee_pub_key_resp_cmd*)tty.recv_buf;
+
     if (ret < sizeof(struct ree_tee_pub_key_resp_cmd))
     {
-        printf("Invalid msg size: %ld\n", ret);
+        printf("Invalid msg size: %ld, type: %d, status: %d, hdr_len: %d\n",
+               ret, ret_cmd->hdr.msg_type, ret_cmd->hdr.status,
+               ret_cmd->hdr.length);
+
         ret = -EINVAL;
         goto out;
     }
-
-    ret_cmd = (struct ree_tee_pub_key_resp_cmd*)tty.recv_buf;
 
     printf("Publick key data Name = %s Length = %d\n", ret_cmd->key_info.name, ret_cmd->key_info.pubkey_length);
 
