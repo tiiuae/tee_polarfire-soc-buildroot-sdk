@@ -1,2 +1,3 @@
 source "$BR2_EXTERNAL_SEL4_AMP_PATH/package/sel4_tool/Config.in"
 source "$BR2_EXTERNAL_SEL4_AMP_PATH/package/optee_client_sel/Config.in"
+source "$BR2_EXTERNAL_SEL4_AMP_PATH/package/opensc/Config.in"
