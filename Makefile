@@ -44,6 +44,9 @@ buildroot_patches := $(shell ls $(buildroot_patchdir)/*.patch)
 buildroot_builddir := $(wrkdir)/buildroot_build
 buildroot_builddir_stamp := $(wrkdir)/.buildroot_builddir
 
+buildroot_pkg_override_src := $(confdir)/$(DEVKIT)/local.mk
+buildroot_pkg_override_target := $(buildroot_initramfs_wrkdir)/local.mk
+
 linux_srcdir := $(srcdir)/linux
 
 linux_wrkdir := $(wrkdir)/linux
@@ -173,7 +176,10 @@ $(buildroot_builddir_stamp): $(buildroot_srcdir) $(buildroot_patches)
 	rm -rf $(buildroot_rootfs_wrkdir)
 	mkdir -p $(buildroot_rootfs_wrkdir)
 
-$(buildroot_initramfs_wrkdir)/.config: $(buildroot_builddir_stamp) $(confdir)/initramfs.txt $(buildroot_rootfs_config) $(buildroot_initramfs_config) $(uboot_s_cfg) $(uboot_s_txt)
+$(buildroot_pkg_override_target): $(buildroot_pkg_override_src)
+	cp $(buildroot_pkg_override_src) $(buildroot_pkg_override_target)
+
+$(buildroot_initramfs_wrkdir)/.config: $(buildroot_builddir_stamp) $(confdir)/initramfs.txt $(buildroot_rootfs_config) $(buildroot_initramfs_config) $(uboot_s_cfg) $(uboot_s_txt) $(buildroot_pkg_override_target)
 	cp $(buildroot_initramfs_config) $(buildroot_initramfs_wrkdir)/.config
 	$(MAKE) -C $(buildroot_builddir) RISCV=$(RISCV) PATH=$(PATH) O=$(buildroot_initramfs_wrkdir) BR2_EXTERNAL=$(BUILDROOT_EXT) olddefconfig CROSS_COMPILE=$(CROSS_COMPILE) -j$(num_threads)
 
@@ -203,6 +209,10 @@ buildroot_rootfs_menuconfig: $(buildroot_rootfs_wrkdir)/.config $(buildroot_buil
 	$(MAKE) -C $(buildroot_builddir) O=$(buildroot_rootfs_wrkdir) BR2_EXTERNAL=$(BUILDROOT_EXT) menuconfig
 	$(MAKE) -C $(buildroot_builddir) O=$(buildroot_rootfs_wrkdir) savedefconfig
 	cp $(buildroot_rootfs_wrkdir)/defconfig conf/buildroot_rootfs_config
+
+.PHONY: sel4-tool-rebuild
+sel4-tool-rebuild:
+	$(MAKE) -C $(buildroot_builddir) RISCV=$(RISCV) PATH=$(PATH) O=$(buildroot_initramfs_wrkdir) -j$(num_threads) DEVKIT=$(DEVKIT) sel4_tool-rebuild
 
 .PHONY: linux_cfg
 cfg: $(linux_wrkdir)/.config
@@ -342,6 +352,7 @@ bootloaders: $(bootloaders-y)
 root-fs: $(rootfs)
 dtbs: ${device_tree_blob}
 compile_toolchain: $(CROSS_COMPILE)gcc
+buildroot_pkg_override: $(buildroot_pkg_override_target)
 
 .PHONY: clean distclean
 clean:

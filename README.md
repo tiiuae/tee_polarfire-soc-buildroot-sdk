@@ -69,6 +69,16 @@ $ make all DEVKIT=icicle-kit-es-sel4 SEL4_BIN=<path_to_seL4_binary>
 
 Build script copies seL4 image from `SEL4_BIN` to `$(buildroot_initramfs_wrkdir)/images`-directory.
 
+## Building buildroot sel4-tool package with local source
+Modify `conf/icicle-kit-es-sel4/local.mk`. Change `SEL4_TOOL_OVERRIDE_SRCDIR` to point local folder with sel4-tool package sources.
+
+First make command is needed only when local.mk is updated
+```
+$ make DEVKIT=icicle-kit-es-sel4 buildroot_pkg_override
+$ make DEVKIT=icicle-kit-es-sel4 sel4-tool-rebuild
+$ make all DEVKIT=icicle-kit-es-sel4 SEL4_BIN=<path_to_seL4_binary>
+```
+
 ## Loading the Image onto the Target
 The instructions for the [eMMC on the Icicle Kit can be found here](#Preparing-the-eMMC-for-the-Icicle-Kit), for the [SD card on the Icicle Kit here](#Preparing-an-SD-Card-for-the-Icicle-Kit) and for the [the MPFS here](#Preparing-an-SD-Card-for-MPFS).
 
