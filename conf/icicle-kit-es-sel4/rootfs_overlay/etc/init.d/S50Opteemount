@@ -1,0 +1,34 @@
+#!/bin/bash
+#
+# Create directory for Optee secure storage
+
+
+
+case "$1" in
+    start)
+	mkdir -p /hdd
+	printf "Mounting 3rd partition as /hdd\n"
+	if mount /dev/mmcblk0p3 /hdd; then
+		printf "Mount /hdd Succesfull\n"
+	else
+		touch /hdd/THIS_IS_NOT_MOUNTED
+	fi
+	mkdir -p /hdd/sstorage
+        #optional:
+        #printf "OpTEE init\n"
+        #sel4-tool -i /hdd/sstorage/optee_ram_image.bin -c 3
+       ;;
+    stop)
+       ;;
+    restart)
+       ;;
+    status)
+       # code to check status of app comes here
+       # example: status program_name
+       ;;
+    *)
+       echo "Usage: $0 {start|stop|status|restart}"
+esac
+
+exit 0
+
