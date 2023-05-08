@@ -21,7 +21,8 @@
 	url = https://github.com/polarfire-soc/polarfire-soc-amp-examples.git
 [submodule "linux"]
 	path = linux
-	url = ssh://gerrit.ssrc-tre.fi:29418/Platsec/polarfire_linux
+	url = https://github.com/tiiuae/optee_polarfire_linux.git
+	branch = platsec_dev
 [submodule "hart-software-services"]
 	path = hart-software-services
-	url = ssh://gerrit.ssrc-tre.fi:29418/Platsec/hart-software-services
+	url = https://github.com/tiiuae/optee_hart-software-services.git
