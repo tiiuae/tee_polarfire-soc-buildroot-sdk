@@ -1,3 +1,4 @@
+
 # Microchip PolarFire SoC Linux Software Development Kit
 This repository builds a command line only RISC-V Linux image for the Microchip PolarFire SoC Development Boards.
 It first will build the GNU cross-compilation toolchain for RISC-V, which will be installed in the `toolchain/` subdirectory. This toolchain is then used to build a Linux image consisting of the kernel, a Busybox based root file system and the necessary bootloaders for each development platform.
@@ -78,6 +79,35 @@ $ make DEVKIT=icicle-kit-es-sel4 buildroot_pkg_override
 $ make DEVKIT=icicle-kit-es-sel4 sel4-tool-rebuild
 $ make all DEVKIT=icicle-kit-es-sel4 SEL4_BIN=<path_to_seL4_binary>
 ```
+
+## Building HSS
+
+Install SoftConsole (v2021.1) and find out SoftConsole installation dir (SC_INSTALL_DIR).
+
+Install Libero SoC (v2021.1) and find out fpgenprog location `<LIBERO_SOC_DIR>/Libero/bin64/fpgenprog` (FPGENPROG).
+
+Build HSS binary (see `README` in https://github.com/polarfire-soc/hart-software-services).
+
+Make sure to use the `8.3.0` version for `riscv64-unknown-elf-gcc`.
+```
+$ riscv64-unknown-elf-gcc --version
+riscv64-unknown-elf-gcc (xPack GNU RISC-V Embedded GCC (Microsemi SoftConsole build), 64-bit) 8.3.0
+Copyright (C) 2018 Free Software Foundation, Inc.
+```
+```
+# Go to hart-software-services workarea
+$ cd <hart-software-services>
+
+# Set tool paths
+$ export SC_INSTALL_DIR=<SOFTCONSOLE_DIR>
+$ export FPGENPROG=<LIBERO_SOC_DIR>/Libero/bin64/fpgenprog
+
+# Second elf-file in build output dir causes problems
+$ rm Default/hss-l2lim.elf
+
+$ $SC_INSTALL_DIR/eclipse/jre/bin/java -jar $SC_INSTALL_DIR/extras/mpfs/mpfsBootmodeProgrammer.jar --workdir $PWD/Default --die MPFS250T_ES --package FCVG484 --bootmode 1
+```
+
 
 ## Loading the Image onto the Target
 The instructions for the [eMMC on the Icicle Kit can be found here](#Preparing-the-eMMC-for-the-Icicle-Kit), for the [SD card on the Icicle Kit here](#Preparing-an-SD-Card-for-the-Icicle-Kit) and for the [the MPFS here](#Preparing-an-SD-Card-for-MPFS).
